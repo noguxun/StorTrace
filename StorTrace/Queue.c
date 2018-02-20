@@ -21,6 +21,12 @@ Environment:
 #pragma alloc_text (PAGE, StorTraceQueueInitialize)
 #endif
 
+VOID
+ForwardRequest(
+	IN WDFREQUEST Request,
+	IN WDFIOTARGET Target
+);
+
 NTSTATUS
 StorTraceQueueInitialize(
     _In_ WDFDEVICE Device
@@ -113,12 +119,43 @@ Return Value:
 
 --*/
 {
+	WDFDEVICE                       device;
+	PDEVICE_CONTEXT                 context;
+	NTSTATUS                        status = STATUS_SUCCESS;
+
     TraceEvents(TRACE_LEVEL_INFORMATION, 
                 TRACE_QUEUE, 
                 "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", 
                 Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);
 
-    WdfRequestComplete(Request, STATUS_SUCCESS);
+	DbgPrint("%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d",
+		Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
+
+
+	device = WdfIoQueueGetDevice(Queue);
+
+	context = DeviceGetContext(device);
+
+	switch (IoControlCode) {
+
+		//
+		// Put your cases for handling IOCTLs here
+		//
+	}
+
+	if (!NT_SUCCESS(status)) {
+		WdfRequestComplete(Request, status);
+		return;
+	}
+
+	//
+	// Forward the request down. WdfDeviceGetIoTarget returns
+	// the default target, which represents the device attached to us below in
+	// the stack.
+	//
+	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+
+	// WdfRequestComplete(Request, STATUS_SUCCESS);
 
     return;
 }
@@ -196,4 +233,34 @@ Return Value:
     //
 
     return;
+}
+
+
+VOID
+ForwardRequest(
+	IN WDFREQUEST Request,
+	IN WDFIOTARGET Target
+)
+{
+	WDF_REQUEST_SEND_OPTIONS options;
+	BOOLEAN ret;
+	NTSTATUS status;
+
+	//
+	// We are not interested in post processing the IRP so 
+	// fire and forget.
+	//
+	WDF_REQUEST_SEND_OPTIONS_INIT(&options,
+		WDF_REQUEST_SEND_OPTION_SEND_AND_FORGET);
+
+	ret = WdfRequestSend(Request, Target, &options);
+	DbgPrint("Forward request");
+
+	if (ret == FALSE) {
+		status = WdfRequestGetStatus(Request);
+		KdPrint(("WdfRequestSend failed: 0x%x\n", status));
+		WdfRequestComplete(Request, status);
+	}
+
+	return;
 }
