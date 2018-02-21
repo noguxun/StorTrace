@@ -196,7 +196,6 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
     for (argIndex = 1; argIndex < argc; argIndex++) {
 
-#pragma prefast(suppress:6385, "Previously checked argIndex being less than argc. No buffer overflow.")
         if( _tcscmp(argv[argIndex], _T("/listdevices")) == 0 ) {
 
             listDevices = TRUE;
@@ -212,6 +211,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             if( argIndex < argc ) {
                 deviceName = argv[argIndex];
+				_tprintf(_T("Device Name: %s\n"), deviceName);
             } else {
                 PrintUsage();
                 return (0);
@@ -647,6 +647,19 @@ void PrintDeviceName(
                                             SPDRP_PHYSICAL_DEVICE_OBJECT_NAME,
                                             &regDataType );
 
+	LPTSTR deviceFriendlyName =
+		(LPTSTR)GetDeviceRegistryProperty(
+			DeviceInfoSet,
+			DeviceInfoData,
+			SPDRP_FRIENDLYNAME,
+			&regDataType);
+
+	if (deviceFriendlyName)
+	{ 
+		_tprintf(_T("%s\n"), deviceFriendlyName);
+	}
+	
+
     if( deviceName != NULL )
     {
         // just to make sure we are getting the expected type of buffer
@@ -763,6 +776,7 @@ DeviceNameMatches(
 
             // do the strings match?
             matching = (_tcscmp(deviceName, DeviceName) == 0) ? TRUE : FALSE;
+			_tprintf(_T("comparing %s  to  %s\n"), deviceName, DeviceName);
         }
         free( deviceName );
     }
