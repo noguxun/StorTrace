@@ -1,6 +1,8 @@
 #include "ntddk.h"
 #include "ntdddisk.h"
 #include "ntdef.h"
+#include "srb.h"
+#include "ntstrsafe.h"
 
 //
 // Device Extension
@@ -46,16 +48,70 @@ DiskTraceSendToNextDriver(
 )
 {
 	PDEVICE_EXTENSION   deviceExtension;
+	PIO_STACK_LOCATION  irpStack;
+	char *pBuffer = ExAllocatePoolWithTag(NonPagedPool | POOL_RAISE_IF_ALLOCATION_FAILURE, 100, 0xAABBCCDD);
+	char *pBufferPos = pBuffer;
+	
+
+	// Print OUT CDB of SCSI commands
+	do
+	{
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
+		irpStack = IoGetCurrentIrpStackLocation(Irp);
+		if (irpStack == NULL)
+		{
+			DbgPrint("irpStack is null\n");
+			break;
+		}
+
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+		DbgPrint("Major 0x%x minor 0x%x, ", irpStack->MajorFunction, irpStack->MinorFunction);
+
+		if (irpStack->MajorFunction != IRP_MJ_SCSI) {
+			DbgPrint("\n");
+			break;
+		}
+
+		PUCHAR              cdb;
+		UCHAR               cdbLength;
+		PSCSI_REQUEST_BLOCK srb;
+
+		srb = irpStack->Parameters.Scsi.Srb;
+		if (srb == NULL)
+		{
+			DbgPrint("srb is null\n");
+			break;
+		}
+
+		cdb = srb->Cdb;
+		if (cdb == NULL)
+		{
+			DbgPrint("cdb is null\n");
+			break;
+		}
+
+		cdbLength = srb->CdbLength;
+
+		DbgPrint("CDB %2d bytes:", cdbLength);
+		for (int i = 0; i < cdbLength; i++)
+		{							
+			RtlStringCchPrintfA(pBufferPos, 3+1, " %2x", cdb[i]);
+			pBufferPos += 3;
+		}
+		pBufferPos[0] = 0;	
+	} while (0);
+	DbgPrint("%s", pBuffer);
+
+	ExFreePool(pBuffer);
 
 	IoSkipCurrentIrpStackLocation(Irp);
 	deviceExtension = (PDEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
-	DbgPrint("DiskTraceSendToNextDriver: Device extension is null!\n");
 	if (deviceExtension == NULL)
 	{
-		DbgPrint("DiskTraceSendToNextDriver: Device extension is null!\n");
+		DbgPrint("DiskTraceSendToNextDriver: NULL extension!\n");
 		return STATUS_UNSUCCESSFUL;
-	}
+	}	
 
 	return IoCallDriver(deviceExtension->TargetDeviceObject, Irp);
 }
@@ -89,8 +145,7 @@ DiskTraceAddDevice(
 {
 	NTSTATUS                status;
 	PDEVICE_OBJECT          filterDeviceObject;
-	PDEVICE_EXTENSION       deviceExtension;
-	
+	PDEVICE_EXTENSION       deviceExtension;	
 
 	DbgPrint("Add Device");
 

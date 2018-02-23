@@ -270,7 +270,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
         // as per DDK docs on SetupDiEnumDeviceInfo
         devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
-
+		 
         // step through the list of devices for this handle
         // get device info at index deviceIndex, the function returns FALSE
         // when there is no device at the given index.

@@ -1,7 +1,11 @@
 setlocal
-rem should not start with \Device
-rem set DEVICE=\Device\00000035
-set DEVICE=\0000006a  
-copy /y ".\x64\Debug\DiskTrace.sys" c:\windows\system32\drivers\*
-.\AddFilter\x64\Debug\addfilter.exe /device %DEVICE%  /add DiskTrace
-rem psshutdown /r /t 0
+REM should not start with \Device
+set DEVICE=\00000069
+copy /y ".\DiskTrace.sys" %SystemRoot%\system32\drivers\*
+
+REM http://www.osronline.com/showthread.cfm?link=287922
+sc create DiskTrace binPath= %SystemRoot%\System32\Drivers\DiskTrace.sys type= kernel  start= demand
+
+REM upper filter does not have IRP_MJ_SCSI for read/write
+addfilter.exe /device %DEVICE%  /add DiskTrace /lower
+
