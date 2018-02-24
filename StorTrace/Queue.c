@@ -68,8 +68,11 @@ Return Value:
         WdfIoQueueDispatchParallel
         );
 
+	// we need to handle IRP_MJ_INTERNAL_DEVICE_CONTROL which is also IRP_MJ_SCSI
+	// queueConfig.EvtIoInternalDeviceControl = ....
     queueConfig.EvtIoDeviceControl = StorTraceEvtIoDeviceControl;
     queueConfig.EvtIoStop = StorTraceEvtIoStop;
+	queueConfig.EvtIoInternalDeviceControl = StorTraceEvtIoInternalDeviceControl;
 
     status = WdfIoQueueCreate(
                  Device,
@@ -77,13 +80,37 @@ Return Value:
                  WDF_NO_OBJECT_ATTRIBUTES,
                  &queue
                  );
-
+	 
     if(!NT_SUCCESS(status)) {
         TraceEvents(TRACE_LEVEL_ERROR, TRACE_QUEUE, "WdfIoQueueCreate failed %!STATUS!", status);
         return status;
     }
 
     return status;
+}
+
+VOID
+StorTraceEvtIoInternalDeviceControl(
+	_In_ WDFQUEUE Queue,
+	_In_ WDFREQUEST Request,
+	_In_ size_t OutputBufferLength,
+	_In_ size_t InputBufferLength,
+	_In_ ULONG IoControlCode
+)
+{
+	WDFDEVICE                       device;
+
+	TraceEvents(TRACE_LEVEL_INFORMATION,
+		TRACE_QUEUE,
+		"%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d",
+		Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
+
+	device = WdfIoQueueGetDevice(Queue);
+	DbgPrint("%!FUNC! IoControlCode %d", IoControlCode);
+
+	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+
+	return;
 }
 
 VOID

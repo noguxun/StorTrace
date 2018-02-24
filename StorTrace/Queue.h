@@ -39,4 +39,6 @@ StorTraceQueueInitialize(
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL StorTraceEvtIoDeviceControl;
 EVT_WDF_IO_QUEUE_IO_STOP StorTraceEvtIoStop;
 
+EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL StorTraceEvtIoInternalDeviceControl;
+
 EXTERN_C_END
