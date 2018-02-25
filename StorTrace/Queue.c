@@ -17,6 +17,9 @@ Environment:
 #include "driver.h"
 #include "queue.tmh"
 
+#include "srb.h"
+#include "ntstrsafe.h"
+
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, StorTraceQueueInitialize)
 #endif
@@ -73,6 +76,8 @@ Return Value:
     queueConfig.EvtIoDeviceControl = StorTraceEvtIoDeviceControl;
     queueConfig.EvtIoStop = StorTraceEvtIoStop;
 	queueConfig.EvtIoInternalDeviceControl = StorTraceEvtIoInternalDeviceControl;
+	queueConfig.EvtIoRead = StorTraceEvtIoRead;
+	queueConfig.EvtIoWrite = StorTraceEvtIoWrite;
 
     status = WdfIoQueueCreate(
                  Device,
@@ -90,6 +95,47 @@ Return Value:
 }
 
 VOID
+StorTraceEvtIoRead(
+	_In_
+	WDFQUEUE Queue,
+	_In_
+	WDFREQUEST Request,
+	_In_
+	size_t Length
+)
+{
+	WDFDEVICE                       device;
+
+	device = WdfIoQueueGetDevice(Queue);
+	DbgPrint("%n, length 0x%x", __FUNCTION__, Length);
+
+	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+
+	return;
+}
+
+VOID
+StorTraceEvtIoWrite(
+		_In_
+		WDFQUEUE Queue,
+		_In_
+		WDFREQUEST Request,
+		_In_
+		size_t Length
+)
+{
+	WDFDEVICE                       device;
+
+	device = WdfIoQueueGetDevice(Queue);
+	DbgPrint("%n, length 0x%x", __FUNCTION__, Length);
+
+	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+
+	return;
+}
+
+
+VOID
 StorTraceEvtIoInternalDeviceControl(
 	_In_ WDFQUEUE Queue,
 	_In_ WDFREQUEST Request,
@@ -99,14 +145,66 @@ StorTraceEvtIoInternalDeviceControl(
 )
 {
 	WDFDEVICE                       device;
+	char                            dbgBuffer[100];
 
-	TraceEvents(TRACE_LEVEL_INFORMATION,
-		TRACE_QUEUE,
-		"%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d",
-		Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
+	UNREFERENCED_PARAMETER(OutputBufferLength);
+	UNREFERENCED_PARAMETER(InputBufferLength);
+	UNREFERENCED_PARAMETER(IoControlCode);
 
 	device = WdfIoQueueGetDevice(Queue);
-	DbgPrint("%!FUNC! IoControlCode %d", IoControlCode);
+	DbgPrint("%s  outbuflen %d inbuflen %d ",
+		__FUNCTION__, Request, (int)OutputBufferLength, (int)InputBufferLength);
+
+	do
+	{
+		PIO_STACK_LOCATION  irpStack;
+		char *pBufferPos = dbgBuffer;
+
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
+		irpStack = IoGetCurrentIrpStackLocation(WdfRequestWdmGetIrp(Request));
+		if (irpStack == NULL)
+		{
+			DbgPrint("irpStack is null\n");
+			break;
+		}
+
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+		DbgPrint("Major 0x%x minor 0x%x, ", irpStack->MajorFunction, irpStack->MinorFunction);
+
+		if (irpStack->MajorFunction != IRP_MJ_SCSI) {
+			DbgPrint("\n");
+			break;
+		}
+
+		PUCHAR              cdb;
+		UCHAR               cdbLength;
+		PSCSI_REQUEST_BLOCK srb;
+
+		srb = irpStack->Parameters.Scsi.Srb;
+		if (srb == NULL)
+		{
+			DbgPrint("srb is null\n");
+			break;
+		}
+
+		cdb = srb->Cdb;
+		if (cdb == NULL)
+		{
+			DbgPrint("cdb is null\n");
+			break;
+		}
+
+		cdbLength = srb->CdbLength;
+
+		DbgPrint("CDB %2d bytes:", cdbLength);
+		for (int i = 0; i < cdbLength; i++)
+		{
+			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", cdb[i]);
+			pBufferPos += 3;
+		}
+		pBufferPos[0] = 0;
+	} while (0);
+	DbgPrint("%s", dbgBuffer);
 
 	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -155,9 +253,8 @@ Return Value:
                 "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", 
                 Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);
 
-	DbgPrint("%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d",
-		Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
-
+	DbgPrint("%s  outbuflen %d inbuflen %d ",
+		__FUNCTION__, Request, (int)OutputBufferLength, (int)InputBufferLength);
 
 	device = WdfIoQueueGetDevice(Queue);
 
