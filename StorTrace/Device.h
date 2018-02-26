@@ -24,8 +24,7 @@ EXTERN_C_START
 //
 typedef struct _DEVICE_CONTEXT
 {
-    ULONG PrivateDeviceData;  // just a placeholder
-
+    ULONG SerialNo; 
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 //
@@ -35,6 +34,13 @@ typedef struct _DEVICE_CONTEXT
 //
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, DeviceGetContext)
 
+
+typedef struct _CONTROL_DEVICE_CONTEXT {
+	ULONG   SerialNo;
+
+} CONTROL_DEVICE_CONTEXT, *PCONTROL_DEVICE_CONTEXT;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(CONTROL_DEVICE_CONTEXT, ControlGetData)
 //
 // Function to initialize the device and its callbacks
 //

@@ -1,4 +1,4 @@
 setlocal
-set DEVICE=\0000006a
+set DEVICE=\00000069
 addfilter.exe /device %DEVICE%  /remove StorTrace  /lower
 sc delete StorTrace

@@ -20,46 +20,45 @@ Environment:
 #include "srb.h"
 #include "ntstrsafe.h"
 
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, StorTraceQueueInitialize)
-#endif
 
+//-------------------------------------------------------
+// Function Decldaration
+//-------------------------------------------------------
 VOID
 ForwardRequest(
 	IN WDFREQUEST Request,
 	IN WDFIOTARGET Target
 );
 
+VOID
+ControlDeviceEvtIoDeviceControl(
+	_In_ WDFQUEUE Queue,
+	_In_ WDFREQUEST Request,
+	_In_ size_t OutputBufferLength,
+	_In_ size_t InputBufferLength,
+	_In_ ULONG IoControlCode
+);
+
+
+//-------------------------------------------------------
+// Imported Function & Variable Declaration
+//-------------------------------------------------------
+extern WDFCOLLECTION   DeviceCollection;
+extern WDFWAITLOCK     DeviceCollectionLock;
+
+
+//-------------------------------------------------------
+// Function Implementation, For filter device queue
+//-------------------------------------------------------
 NTSTATUS
 StorTraceQueueInitialize(
     _In_ WDFDEVICE Device
     )
-/*++
-
-Routine Description:
-
-     The I/O dispatch callbacks for the frameworks device object
-     are configured in this function.
-
-     A single default I/O Queue is configured for parallel request
-     processing, and a driver context memory allocation is created
-     to hold our structure QUEUE_CONTEXT.
-
-Arguments:
-
-    Device - Handle to a framework device object.
-
-Return Value:
-
-    VOID
-
---*/
 {
     WDFQUEUE queue;
     NTSTATUS status;
     WDF_IO_QUEUE_CONFIG queueConfig;
 
-    PAGED_CODE();
 
     //
     // Configure a default queue so that requests that are not
@@ -96,18 +95,15 @@ Return Value:
 
 VOID
 StorTraceEvtIoRead(
-	_In_
-	WDFQUEUE Queue,
-	_In_
-	WDFREQUEST Request,
-	_In_
-	size_t Length
+	_In_ 	WDFQUEUE Queue,
+	_In_	WDFREQUEST Request,
+	_In_	size_t Length
 )
 {
 	WDFDEVICE                       device;
 
 	device = WdfIoQueueGetDevice(Queue);
-	DbgPrint("%n, length 0x%x", __FUNCTION__, Length);
+	DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
 
 	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -116,18 +112,15 @@ StorTraceEvtIoRead(
 
 VOID
 StorTraceEvtIoWrite(
-		_In_
-		WDFQUEUE Queue,
-		_In_
-		WDFREQUEST Request,
-		_In_
-		size_t Length
+	_In_	WDFQUEUE Queue,
+	_In_	WDFREQUEST Request,
+	_In_	size_t Length
 )
 {
 	WDFDEVICE                       device;
 
 	device = WdfIoQueueGetDevice(Queue);
-	DbgPrint("%n, length 0x%x", __FUNCTION__, Length);
+	DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
 
 	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -377,8 +370,7 @@ ForwardRequest(
 	WDF_REQUEST_SEND_OPTIONS_INIT(&options,
 		WDF_REQUEST_SEND_OPTION_SEND_AND_FORGET);
 
-	ret = WdfRequestSend(Request, Target, &options);
-	DbgPrint("Forward request");
+	ret = WdfRequestSend(Request, Target, &options);	
 
 	if (ret == FALSE) {
 		status = WdfRequestGetStatus(Request);
@@ -387,4 +379,86 @@ ForwardRequest(
 	}
 
 	return;
+}
+
+
+//-------------------------------------------------------
+// Function Implementation, For control device queue
+//-------------------------------------------------------
+NTSTATUS
+StorTraceControlDeviceQueueInitialize(
+	_In_ WDFDEVICE Device
+)
+{
+	WDFQUEUE queue;
+	NTSTATUS status;
+	WDF_IO_QUEUE_CONFIG queueConfig;
+
+	//
+	// Configure the default queue associated with the control device object
+	// to be Serial so that request passed to EvtIoDeviceControl are serialized.
+	//
+	WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queueConfig,
+		WdfIoQueueDispatchSequential);
+
+	queueConfig.EvtIoDeviceControl = ControlDeviceEvtIoDeviceControl;
+
+	//
+	// Framework by default creates non-power managed queues for
+	// filter drivers.
+	//
+	status = WdfIoQueueCreate(Device,
+		&queueConfig,
+		WDF_NO_OBJECT_ATTRIBUTES,
+		&queue // pointer to default queue
+	);
+	if (!NT_SUCCESS(status)) {
+		DbgPrint("Failed to create Io Queue for controldevice");
+		return status;
+	}
+
+	return status;
+}
+
+
+VOID
+ControlDeviceEvtIoDeviceControl(
+	_In_ WDFQUEUE Queue,
+	_In_ WDFREQUEST Request,
+	_In_ size_t OutputBufferLength,
+	_In_ size_t InputBufferLength,
+	_In_ ULONG IoControlCode
+)
+{
+	
+	ULONG               i;
+	ULONG               noItems;
+	WDFDEVICE           hDevice;
+	PDEVICE_CONTEXT     deviceContext;
+	
+	UNREFERENCED_PARAMETER(Queue);
+	UNREFERENCED_PARAMETER(OutputBufferLength);
+	UNREFERENCED_PARAMETER(InputBufferLength);
+	UNREFERENCED_PARAMETER(IoControlCode);
+
+	
+	DbgPrint("%s.\n", __FUNCTION__);
+
+	WdfWaitLockAcquire(DeviceCollectionLock, NULL);
+
+	noItems = WdfCollectionGetCount(DeviceCollection);
+
+	for (i = 0; i<noItems; i++) {
+
+		hDevice = WdfCollectionGetItem(DeviceCollection, i);
+
+		deviceContext = DeviceGetContext(hDevice);
+
+		DbgPrint("Device Serial No: %d\n", deviceContext->SerialNo);
+	}
+
+	WdfWaitLockRelease(DeviceCollectionLock);
+	
+
+	WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, 0);
 }

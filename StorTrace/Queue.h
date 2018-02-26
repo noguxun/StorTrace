@@ -31,7 +31,12 @@ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(QUEUE_CONTEXT, QueueGetContext)
 NTSTATUS
 StorTraceQueueInitialize(
     _In_ WDFDEVICE Device
-    );
+);
+
+NTSTATUS
+StorTraceControlDeviceQueueInitialize(
+	_In_ WDFDEVICE Device
+);
 
 //
 // Events from the IoQueue object
