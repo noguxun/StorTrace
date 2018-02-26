@@ -58,7 +58,7 @@ StorTraceQueueInitialize(
     WDFQUEUE queue;
     NTSTATUS status;
     WDF_IO_QUEUE_CONFIG queueConfig;
-
+	
 
     //
     // Configure a default queue so that requests that are not
@@ -393,6 +393,7 @@ StorTraceControlDeviceQueueInitialize(
 	WDFQUEUE queue;
 	NTSTATUS status;
 	WDF_IO_QUEUE_CONFIG queueConfig;
+	WDF_OBJECT_ATTRIBUTES  queueAttributes;
 
 	//
 	// Configure the default queue associated with the control device object
@@ -402,6 +403,11 @@ StorTraceControlDeviceQueueInitialize(
 		WdfIoQueueDispatchSequential);
 
 	queueConfig.EvtIoDeviceControl = ControlDeviceEvtIoDeviceControl;
+	queueConfig.EvtIoRead = ControlDeviceEvtIoRead;
+	queueConfig.EvtIoWrite = ControlDeviceEvtIoWrite;
+
+	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&queueAttributes, QUEUE_CONTEXT);
+	queueAttributes.SynchronizationScope = WdfSynchronizationScopeQueue;
 
 	//
 	// Framework by default creates non-power managed queues for
@@ -409,7 +415,7 @@ StorTraceControlDeviceQueueInitialize(
 	//
 	status = WdfIoQueueCreate(Device,
 		&queueConfig,
-		WDF_NO_OBJECT_ATTRIBUTES,
+		&queueAttributes,
 		&queue // pointer to default queue
 	);
 	if (!NT_SUCCESS(status)) {
@@ -454,11 +460,74 @@ ControlDeviceEvtIoDeviceControl(
 
 		deviceContext = DeviceGetContext(hDevice);
 
-		DbgPrint("Device Serial No: %d\n", deviceContext->SerialNo);
+		DbgPrint("Device Serial No: 0x%x\n", deviceContext->SerialNo);
 	}
 
 	WdfWaitLockRelease(DeviceCollectionLock);
 	
 
 	WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, 0);
+}
+
+VOID
+ControlDeviceEvtIoWrite(
+	_In_ 	WDFQUEUE Queue,
+	_In_	WDFREQUEST Request,
+	_In_	size_t Length
+)
+{
+	WDFDEVICE                       device;
+	NTSTATUS       status = STATUS_SUCCESS;
+
+	device = WdfIoQueueGetDevice(Queue);
+	DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
+
+	Length = 0L;
+	WdfRequestSetInformation(Request, (ULONG_PTR)0);	
+
+	WdfRequestComplete(Request, status);
+	return;
+}
+
+VOID
+ControlDeviceEvtIoRead(
+	_In_ 	WDFQUEUE Queue,
+	_In_	WDFREQUEST Request,
+	_In_	size_t Length
+)
+{
+	WDFDEVICE device;
+	NTSTATUS status = STATUS_SUCCESS;
+	WDFMEMORY memory;
+
+	device = WdfIoQueueGetDevice(Queue);
+	DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
+	
+	status = WdfRequestRetrieveOutputMemory(Request, &memory);
+	if (!NT_SUCCESS(status)) {
+		KdPrint(("EchoEvtIoRead Could not get request memory buffer 0x%x\n", status));
+		WdfVerifierDbgBreakPoint();
+		WdfRequestCompleteWithInformation(Request, status, 0L);
+		return;
+	}
+
+	char *p = "The light the clock of the universe";
+	Length = 10L;
+	// Copy the memory out
+	status = WdfMemoryCopyFromBuffer(
+		memory, // destination
+		0,      // offset into the destination memory
+		p,      // source
+		Length);
+	if (!NT_SUCCESS(status)) {
+		KdPrint(("EchoEvtIoRead: WdfMemoryCopyFromBuffer failed 0x%x\n", status));
+
+		return;
+	}
+	
+	WdfRequestSetInformation(Request, (ULONG_PTR)Length);
+	
+	WdfRequestComplete(Request, status);
+
+	return;
 }
