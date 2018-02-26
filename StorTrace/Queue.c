@@ -31,6 +31,20 @@ ForwardRequest(
 );
 
 VOID
+ForwardRequestWithCompletion(
+	IN WDFREQUEST Request,
+	IN WDFIOTARGET Target
+);
+
+VOID
+RequestCompletionRoutine(
+	IN WDFREQUEST                  Request,
+	IN WDFIOTARGET                 Target,
+	PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
+	IN WDFCONTEXT                  Context
+);
+
+VOID
 ControlDeviceEvtIoDeviceControl(
 	_In_ WDFQUEUE Queue,
 	_In_ WDFREQUEST Request,
@@ -196,10 +210,11 @@ StorTraceEvtIoInternalDeviceControl(
 			pBufferPos += 3;
 		}
 		pBufferPos[0] = 0;
-	} while (0);
-	DbgPrint("%s", dbgBuffer);
+	} while (FALSE);
 
-	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+	DbgPrint("%s request 0x%p", dbgBuffer, Request);
+
+	ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
 
 	return;
 }
@@ -377,6 +392,56 @@ ForwardRequest(
 		KdPrint(("WdfRequestSend failed: 0x%x\n", status));
 		WdfRequestComplete(Request, status);
 	}
+
+	return;
+}
+
+VOID
+ForwardRequestWithCompletion(
+	IN WDFREQUEST Request,
+	IN WDFIOTARGET Target
+)
+{
+	BOOLEAN ret;
+	NTSTATUS status;
+
+	//
+	// The following funciton essentially copies the content of
+	// current stack location of the underlying IRP to the next one. 
+	//
+	WdfRequestFormatRequestUsingCurrentType(Request);
+
+	WdfRequestSetCompletionRoutine(Request,
+		RequestCompletionRoutine,
+		WDF_NO_CONTEXT);
+
+	ret = WdfRequestSend(Request,
+		Target,
+		WDF_NO_SEND_OPTIONS);
+
+	if (ret == FALSE) {
+		status = WdfRequestGetStatus(Request);
+		KdPrint(("WdfRequestSend failed: 0x%x\n", status));
+		WdfRequestComplete(Request, status);
+	}
+
+	return;
+}
+
+VOID
+RequestCompletionRoutine(
+	IN WDFREQUEST                  Request,
+	IN WDFIOTARGET                 Target,
+	PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
+	IN WDFCONTEXT                  Context
+)
+{
+	UNREFERENCED_PARAMETER(Target);
+	UNREFERENCED_PARAMETER(Context);
+
+	WdfRequestComplete(Request, CompletionParams->IoStatus.Status);
+
+	DbgPrint("%s request 0X%p\n", __FUNCTION__, Request);
 
 	return;
 }

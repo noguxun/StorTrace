@@ -1,6 +1,10 @@
 setlocal
-REM should not start with \Device
-set DEVICE=\00000069
+
+REM get the device name from device Name.txt
+FOR /F %%i IN (deviceName.txt) DO (
+SET DEVICE=%%i
+)
+
 copy /y ".\StorTrace.sys" %SystemRoot%\system32\drivers\*
 
 REM http://www.osronline.com/showthread.cfm?link=287922
