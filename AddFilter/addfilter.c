@@ -158,6 +158,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
     // disks and volumes on the system. Adding another GUID should "just work"
     static const GUID * deviceGuids[] = {
         &GUID_DEVINTERFACE_DISK,
+		&GUID_DEVINTERFACE_STORAGEPORT,
         //&GUID_DEVINTERFACE_VOLUME,
         //&GUID_DEVINTERFACE_CDROM
     };
@@ -267,6 +268,8 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
             printf("got INVALID_HANDLE_VALUE!\n");
             return (1);
         }
+
+		printf("---------------------------\n");
 
         // as per DDK docs on SetupDiEnumDeviceInfo
         devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
@@ -657,6 +660,26 @@ void PrintDeviceName(
 	if (deviceFriendlyName)
 	{ 
 		_tprintf(_T("%s\n"), deviceFriendlyName);
+	}
+	else
+	{
+		_tprintf(_T("no friendly name\n"));
+	}
+
+	LPTSTR deviceDescription =
+		(LPTSTR)GetDeviceRegistryProperty(
+			DeviceInfoSet,
+			DeviceInfoData,
+			SPDRP_DEVICEDESC,
+			&regDataType);
+
+	if (deviceDescription && regDataType == REG_SZ)
+	{
+        _tprintf(_T("description: %s\n"), deviceDescription);
+	}
+	else
+	{
+		_tprintf(_T("no description name\n"));
 	}
 	
 
