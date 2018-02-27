@@ -17,6 +17,7 @@ Environment:
 #include "driver.h"
 #include "driver.tmh"
 
+#include "RingBuf.h"
 //-------------------------------------------------------
 // Variable Definition
 //-------------------------------------------------------
@@ -80,6 +81,12 @@ Return Value:
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Entry");
 
 	DbgPrint("DriverEntry\n");	
+
+	// 
+	// Init ring buffer for data capture
+	// TODO: make it per-device? 
+	//
+	RingBufReset();
 
     //
     // Register a cleanup callback so that we can call WPP_CLEANUP when

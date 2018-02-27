@@ -1,2 +1,2 @@
-bcdedit /set testsigning off
+bcdedit /set testsigning on
 bcdedit /set nointegritychecks on

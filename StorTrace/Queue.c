@@ -20,6 +20,8 @@ Environment:
 #include "srb.h"
 #include "ntstrsafe.h"
 
+#include "RingBuf.h"
+
 
 //-------------------------------------------------------
 // Function Decldaration
@@ -152,20 +154,18 @@ StorTraceEvtIoInternalDeviceControl(
 )
 {
 	WDFDEVICE                       device;
-	char                            dbgBuffer[100];
+	
 
 	UNREFERENCED_PARAMETER(OutputBufferLength);
 	UNREFERENCED_PARAMETER(InputBufferLength);
 	UNREFERENCED_PARAMETER(IoControlCode);
 
 	device = WdfIoQueueGetDevice(Queue);
-	DbgPrint("%s  outbuflen %d inbuflen %d ",
-		__FUNCTION__, Request, (int)OutputBufferLength, (int)InputBufferLength);
 
 	do
 	{
 		PIO_STACK_LOCATION  irpStack;
-		char *pBufferPos = dbgBuffer;
+		
 
 		// https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
 		irpStack = IoGetCurrentIrpStackLocation(WdfRequestWdmGetIrp(Request));
@@ -176,7 +176,7 @@ StorTraceEvtIoInternalDeviceControl(
 		}
 
 		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
-		DbgPrint("Major 0x%x minor 0x%x, ", irpStack->MajorFunction, irpStack->MinorFunction);
+		// DbgPrint("Major 0x%x minor 0x%x, ", irpStack->MajorFunction, irpStack->MinorFunction);
 
 		if (irpStack->MajorFunction != IRP_MJ_SCSI) {
 			DbgPrint("\n");
@@ -202,7 +202,14 @@ StorTraceEvtIoInternalDeviceControl(
 		}
 
 		cdbLength = srb->CdbLength;
+		if (cdbLength == 0)
+		{
+			break;
+		}
 
+		
+		char dbgBuffer[100];
+		char *pBufferPos = dbgBuffer;
 		DbgPrint("CDB %2d bytes:", cdbLength);
 		for (int i = 0; i < cdbLength; i++)
 		{
@@ -210,10 +217,22 @@ StorTraceEvtIoInternalDeviceControl(
 			pBufferPos += 3;
 		}
 		pBufferPos[0] = 0;
+		DbgPrint("%s request 0x%p", dbgBuffer, Request);
+		
+
+		// TODO: make the copy faster, not one byte by one byte
+		// Save data to CDB info to ring buffer
+		
+		RingBufPut(0x20); // magic number to 
+		RingBufPut(0x18);
+		RingBufPut(cdbLength);
+		for (int i = 0; i < cdbLength; i++)
+		{
+			RingBufPut(cdb[i]);
+		}
+		
 	} while (FALSE);
-
-	DbgPrint("%s request 0x%p", dbgBuffer, Request);
-
+	
 	ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
 
 	return;
@@ -261,8 +280,7 @@ Return Value:
                 "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", 
                 Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);
 
-	DbgPrint("%s  outbuflen %d inbuflen %d ",
-		__FUNCTION__, Request, (int)OutputBufferLength, (int)InputBufferLength);
+	DbgPrint("%s  ", __FUNCTION__);
 
 	device = WdfIoQueueGetDevice(Queue);
 
@@ -513,7 +531,7 @@ ControlDeviceEvtIoDeviceControl(
 	UNREFERENCED_PARAMETER(IoControlCode);
 
 	
-	DbgPrint("%s.\n", __FUNCTION__);
+	// DbgPrint("%s.\n", __FUNCTION__);
 
 	WdfWaitLockAcquire(DeviceCollectionLock, NULL);
 
@@ -566,9 +584,10 @@ ControlDeviceEvtIoRead(
 	WDFMEMORY memory;
 
 	device = WdfIoQueueGetDevice(Queue);
-	DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
+	// DbgPrint("%s, length 0x%x", __FUNCTION__, Length);
 	
 	status = WdfRequestRetrieveOutputMemory(Request, &memory);
+
 	if (!NT_SUCCESS(status)) {
 		KdPrint(("EchoEvtIoRead Could not get request memory buffer 0x%x\n", status));
 		WdfVerifierDbgBreakPoint();
@@ -576,21 +595,29 @@ ControlDeviceEvtIoRead(
 		return;
 	}
 
-	char *p = "The light the clock of the universe";
-	Length = 10L;
-	// Copy the memory out
-	status = WdfMemoryCopyFromBuffer(
-		memory, // destination
-		0,      // offset into the destination memory
-		p,      // source
-		Length);
-	if (!NT_SUCCESS(status)) {
-		KdPrint(("EchoEvtIoRead: WdfMemoryCopyFromBuffer failed 0x%x\n", status));
+	// Copy data byte by byte
+	// TODO: optimize it
+	size_t i;
+	for (i = 0; i < Length; i++) {
+		UCHAR data; 
+		if (!RingBufGet(&data)) {
+			break;
+		}
+		// Copy the memory out
+		status = WdfMemoryCopyFromBuffer(
+			memory,     // destination
+			i,          // offset into the destination memory
+			&data,      // source
+			1);         // copy one byte
+		if (!NT_SUCCESS(status)) {
+			KdPrint(("EchoEvtIoRead: WdfMemoryCopyFromBuffer failed 0x%x\n", status));
 
-		return;
+			return;
+		}
 	}
-	
-	WdfRequestSetInformation(Request, (ULONG_PTR)Length);
+
+	// Set how many bytes are copied
+	WdfRequestSetInformation(Request, (ULONG_PTR)(i+1));
 	
 	WdfRequestComplete(Request, status);
 
