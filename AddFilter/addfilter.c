@@ -61,6 +61,8 @@ _Analysis_mode_(_Analysis_code_type_user_code_);
 #define ASSERT(condition)
 #endif
 
+#include "Devguid.h"
+
 BOOLEAN
 AddFilterDriver(
     IN HDEVINFO DeviceInfoSet,
@@ -157,10 +159,14 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
     // these two constants are used to help enumerate through the list of all
     // disks and volumes on the system. Adding another GUID should "just work"
     static const GUID * deviceGuids[] = {
-        &GUID_DEVINTERFACE_DISK,
-		&GUID_DEVINTERFACE_STORAGEPORT,
+        //&GUID_DEVINTERFACE_DISK,
+		//&GUID_DEVINTERFACE_STORAGEPORT,
         //&GUID_DEVINTERFACE_VOLUME,
-        //&GUID_DEVINTERFACE_CDROM
+        //&GUID_DEVINTERFACE_CDROM,
+
+		&GUID_DEVCLASS_DISKDRIVE,
+		&GUID_DEVCLASS_SCSIADAPTER,
+		&GUID_DEVCLASS_HDC,
     };
     static const int numdeviceGuids = sizeof(deviceGuids) / sizeof(LPGUID);
 
@@ -261,7 +267,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
                                        NULL,
                                        NULL,
                                        DIGCF_PROFILE |
-                                       DIGCF_DEVICEINTERFACE |
+                                       //DIGCF_DEVICEINTERFACE |									   
                                        DIGCF_PRESENT );
 
         if( devInfo == INVALID_HANDLE_VALUE ) {
@@ -277,6 +283,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
         // step through the list of devices for this handle
         // get device info at index deviceIndex, the function returns FALSE
         // when there is no device at the given index.
+		
         for( deviceIndex=0;
              SetupDiEnumDeviceInfo( devInfo, deviceIndex, &devInfoData );
              deviceIndex++ ) {
@@ -303,16 +310,12 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             // print the device name
             if( keepGoing && listDevices ) {
-
                 PrintDeviceName( devInfo, &devInfoData );
-
             }
 
             // print the drivers, if we are not adding or removing one
             if( keepGoing && filterToAdd == NULL && filterToRemove == NULL ) {
-
                 PrintFilters( devInfo, &devInfoData, upperFilter );
-
             }
 
             // add the filter, then try to restart the device
@@ -356,7 +359,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             if( listDevices )
             {
-                printf("\n");
+                printf("\n\n");
             }
 
             // end of main processing loop
@@ -371,6 +374,8 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
             }
 
         }
+
+		
 
     } // loop for each GUID index
 
@@ -610,7 +615,15 @@ PrintFilters(
     {
         // if there is no such value in the registry, then there are no upper
         // filter drivers loaded
-        printf("There are no upper filter drivers loaded for this device.\n");
+        printf("There are no");
+		if (UpperFilters) {
+			printf(" upper ");
+		}
+		else
+		{
+			printf(" lower ");
+		}
+		printf("filter drivers loaded for this device.\n");
     }
     else
     {
@@ -659,11 +672,11 @@ void PrintDeviceName(
 
 	if (deviceFriendlyName)
 	{ 
-		_tprintf(_T("%s\n"), deviceFriendlyName);
+		_tprintf(_T("Friendly Name: %s\n"), deviceFriendlyName);
 	}
 	else
 	{
-		_tprintf(_T("no friendly name\n"));
+		_tprintf(_T("Friendly Name: None\n"));
 	}
 
 	LPTSTR deviceDescription =
@@ -675,11 +688,11 @@ void PrintDeviceName(
 
 	if (deviceDescription && regDataType == REG_SZ)
 	{
-        _tprintf(_T("description: %s\n"), deviceDescription);
+        _tprintf(_T("Description: %s\n"), deviceDescription);
 	}
 	else
 	{
-		_tprintf(_T("no description name\n"));
+		_tprintf(_T("Description: None\n"));
 	}
 	
 

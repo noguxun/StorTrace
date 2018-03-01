@@ -150,6 +150,7 @@ Return Value:
 	}
 	WdfWaitLockRelease(DeviceCollectionLock);
 
+
 	//
 	// Create a control device
 	//

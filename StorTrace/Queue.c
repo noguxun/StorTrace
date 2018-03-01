@@ -19,8 +19,10 @@ Environment:
 
 #include "srb.h"
 #include "ntstrsafe.h"
+#include "ntddscsi.h"
 
 #include "RingBuf.h"
+
 
 
 //-------------------------------------------------------
@@ -162,6 +164,9 @@ StorTraceEvtIoInternalDeviceControl(
 
 	device = WdfIoQueueGetDevice(Queue);
 
+	DbgPrint("%s", __FUNCTION__);
+
+	
 	do
 	{
 		PIO_STACK_LOCATION  irpStack;
@@ -195,18 +200,12 @@ StorTraceEvtIoInternalDeviceControl(
 		}
 
 		cdb = srb->Cdb;
-		if (cdb == NULL)
-		{
-			DbgPrint("cdb is null\n");
-			break;
-		}
-
 		cdbLength = srb->CdbLength;
-		if (cdbLength == 0)
+		if (cdbLength == 0 || cdbLength > 16)
 		{
+			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
 			break;
-		}
-
+		}		
 		
 		char dbgBuffer[100];
 		char *pBufferPos = dbgBuffer;
@@ -222,7 +221,7 @@ StorTraceEvtIoInternalDeviceControl(
 
 		// TODO: make the copy faster, not one byte by one byte
 		// Save data to CDB info to ring buffer
-		
+		/*
 		RingBufPut(0x20); // magic number to 
 		RingBufPut(0x18);
 		RingBufPut(cdbLength);
@@ -230,10 +229,12 @@ StorTraceEvtIoInternalDeviceControl(
 		{
 			RingBufPut(cdb[i]);
 		}
-		
+		*/
 	} while (FALSE);
 	
-	ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
+	
+	// ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
+	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
 	return;
 }
@@ -273,30 +274,66 @@ Return Value:
 {
 	WDFDEVICE                       device;
 	PDEVICE_CONTEXT                 context;
-	NTSTATUS                        status = STATUS_SUCCESS;
+	PIRP                            irp;
+	PIO_STACK_LOCATION              irpStack;
 
     TraceEvents(TRACE_LEVEL_INFORMATION, 
                 TRACE_QUEUE, 
                 "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", 
                 Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);
 
-	DbgPrint("%s  ", __FUNCTION__);
+	
+
+	irp = WdfRequestWdmGetIrp(Request);
+
+	irpStack = IoGetCurrentIrpStackLocation(irp);
+	if (irpStack == NULL)
+	{
+		DbgPrint("irpStack is null\n");		
+	}
+
+    
 
 	device = WdfIoQueueGetDevice(Queue);
 
 	context = DeviceGetContext(device);
 
-	switch (IoControlCode) {
+	do {
+		if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
+			break;
+		}
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+	    // https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
+		DbgPrint("%s  Major 0x%x , Minor 0x%x, length 0x%x\n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction, irpStack->Parameters.DeviceIoControl.InputBufferLength);
 
 		//
-		// Put your cases for handling IOCTLs here
-		//
-	}
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ns-ntddscsi-_scsi_pass_through_direct
+		// Parameters.DeviceIoControl.InputBufferLength indicates the size, in bytes, of the buffer at Irp->AssociatedIrp.SystemBuffer, which must be at least (sense data size + sizeof (SCSI_PASS_THROUGH_DIRECT)). The size of the SCSI_PASS_THROUGH_DIRECT structure is fixed.
+		// https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
+		//   For most public I/O control codes, device drivers transfer a small amount of data to or from the buffer at Irp->AssociatedIrp.SystemBuffer.
+		//  
+		PSCSI_PASS_THROUGH_DIRECT pScsiDirect = irp->AssociatedIrp.SystemBuffer;
+		UCHAR cdbLength = pScsiDirect->CdbLength;
+		PUCHAR cdb = pScsiDirect->Cdb;
+		if (cdbLength == 0 || cdbLength > 16)
+		{
+			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
+			break;
+		}
 
-	if (!NT_SUCCESS(status)) {
-		WdfRequestComplete(Request, status);
-		return;
-	}
+		char dbgBuffer[100];
+		char *pBufferPos = dbgBuffer;
+		DbgPrint("CDB %2d bytes %x:", cdbLength, pScsiDirect->Cdb[0]);
+		for (int i = 0; i < cdbLength; i++)
+		{
+			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", cdb[i]);
+			pBufferPos += 3;
+		}
+		pBufferPos[0] = 0;
+		DbgPrint("%s request 0x%p", dbgBuffer, Request);
+		
+	} while(FALSE);
 
 	//
 	// Forward the request down. WdfDeviceGetIoTarget returns
