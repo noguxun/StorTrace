@@ -199,13 +199,22 @@ StorTraceEvtIoInternalDeviceControl(
 			break;
 		}
 
+		if (srb->Function != SRB_FUNCTION_EXECUTE_SCSI)
+		{
+			//
+			// we could have SRB_FUNCTION_STORAGE_REQUEST_BLOCK... etc
+			// currently, we only support SCSI
+			DbgPrint("srb function is 0x%x, not supported\n", srb->Function);
+			break;
+		}
+
 		cdb = srb->Cdb;
 		cdbLength = srb->CdbLength;
 		if (cdbLength == 0 || cdbLength > 16)
 		{
 			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
 			break;
-		}		
+		}
 		
 		char dbgBuffer[100];
 		char *pBufferPos = dbgBuffer;
@@ -231,8 +240,7 @@ StorTraceEvtIoInternalDeviceControl(
 		}
 		*/
 	} while (FALSE);
-	
-	
+		
 	// ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
 	ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -298,40 +306,60 @@ Return Value:
 
 	context = DeviceGetContext(device);
 
+	// 
+	// Storage class drivers set the minor IRP number to IRP_MN_SCSI_CLASS to indicate that the request has been processed by a storage class driver. 
+	// Parameters.DeviceIoControl.InputBufferLength indicates the size, in bytes, of the buffer at Irp->AssociatedIrp.SystemBuffer, which must be at least 
+	//  (sense data size + sizeof (SCSI_PASS_THROUGH_DIRECT)). The size of the SCSI_PASS_THROUGH_DIRECT structure is fixed.
+	// For most public I / O control codes, device drivers transfer a small amount of data to or from the buffer at Irp->AssociatedIrp.SystemBuffer.
+	// Reference:
+	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
+	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ns-ntddscsi-_scsi_pass_through_direct
+	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
+	//   https://github.com/Microsoft/Windows-driver-samples/blob/master/filesys/fastfat/devctrl.c 
+	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+	//
 	do {
 		if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
+			DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT", IoControlCode);
 			break;
 		}
-		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
-	    // https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
-		DbgPrint("%s  Major 0x%x , Minor 0x%x, length 0x%x\n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction, irpStack->Parameters.DeviceIoControl.InputBufferLength);
 
-		//
-		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
-		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ns-ntddscsi-_scsi_pass_through_direct
-		// Parameters.DeviceIoControl.InputBufferLength indicates the size, in bytes, of the buffer at Irp->AssociatedIrp.SystemBuffer, which must be at least (sense data size + sizeof (SCSI_PASS_THROUGH_DIRECT)). The size of the SCSI_PASS_THROUGH_DIRECT structure is fixed.
-		// https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
-		//   For most public I/O control codes, device drivers transfer a small amount of data to or from the buffer at Irp->AssociatedIrp.SystemBuffer.
-		//  
-		PSCSI_PASS_THROUGH_DIRECT pScsiDirect = irp->AssociatedIrp.SystemBuffer;
-		UCHAR cdbLength = pScsiDirect->CdbLength;
-		PUCHAR cdb = pScsiDirect->Cdb;
+		DbgPrint("%s  Major 0x%x , Minor 0x%x, length 0x%x\n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction, irpStack->Parameters.DeviceIoControl.InputBufferLength);
+		if (IRP_MN_SCSI_CLASS == irpStack->MinorFunction)
+		{
+
+		}
+
+		PUCHAR  pCdb;
+		UCHAR cdbLength;
+		if (IoIs32bitProcess(irp)) {
+			PSCSI_PASS_THROUGH_DIRECT32 pScsi = irp->AssociatedIrp.SystemBuffer;
+			pCdb = pScsi->Cdb;
+			cdbLength = pScsi->CdbLength;
+		}
+		else {
+			PSCSI_PASS_THROUGH_DIRECT pScsi = irp->AssociatedIrp.SystemBuffer;
+			pCdb = pScsi->Cdb;
+			cdbLength = pScsi->CdbLength;
+		}
+
 		if (cdbLength == 0 || cdbLength > 16)
 		{
 			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
 			break;
 		}
-
+		
+		
 		char dbgBuffer[100];
-		char *pBufferPos = dbgBuffer;
-		DbgPrint("CDB %2d bytes %x:", cdbLength, pScsiDirect->Cdb[0]);
+		char *pBufferPos = dbgBuffer;		
 		for (int i = 0; i < cdbLength; i++)
 		{
-			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", cdb[i]);
+			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", pCdb[i]);
 			pBufferPos += 3;
 		}
 		pBufferPos[0] = 0;
 		DbgPrint("%s request 0x%p", dbgBuffer, Request);
+		
 		
 	} while(FALSE);
 
