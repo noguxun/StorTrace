@@ -57,7 +57,11 @@ ControlDeviceEvtIoDeviceControl(
 	_In_ ULONG IoControlCode
 );
 
+VOID
+DbgPrintCdb(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
 
+VOID
+SaveCdbToRingBuf(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
 //-------------------------------------------------------
 // Imported Function & Variable Declaration
 //-------------------------------------------------------
@@ -216,29 +220,11 @@ StorTraceEvtIoInternalDeviceControl(
 			break;
 		}
 		
-		char dbgBuffer[100];
-		char *pBufferPos = dbgBuffer;
-		DbgPrint("CDB %2d bytes:", cdbLength);
-		for (int i = 0; i < cdbLength; i++)
-		{
-			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", cdb[i]);
-			pBufferPos += 3;
-		}
-		pBufferPos[0] = 0;
-		DbgPrint("%s request 0x%p", dbgBuffer, Request);
-		
+		//
+		// Save CDB to ring buf
+		//
+		SaveCdbToRingBuf(cdb, cdbLength);
 
-		// TODO: make the copy faster, not one byte by one byte
-		// Save data to CDB info to ring buffer
-		/*
-		RingBufPut(0x20); // magic number to 
-		RingBufPut(0x18);
-		RingBufPut(cdbLength);
-		for (int i = 0; i < cdbLength; i++)
-		{
-			RingBufPut(cdb[i]);
-		}
-		*/
 	} while (FALSE);
 		
 	// ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device));
@@ -298,9 +284,7 @@ Return Value:
 	if (irpStack == NULL)
 	{
 		DbgPrint("irpStack is null\n");		
-	}
-
-    
+	}    
 
 	device = WdfIoQueueGetDevice(Queue);
 
@@ -348,19 +332,12 @@ Return Value:
 			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
 			break;
 		}
-		
-		
-		char dbgBuffer[100];
-		char *pBufferPos = dbgBuffer;		
-		for (int i = 0; i < cdbLength; i++)
-		{
-			RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", pCdb[i]);
-			pBufferPos += 3;
-		}
-		pBufferPos[0] = 0;
-		DbgPrint("%s request 0x%p", dbgBuffer, Request);
-		
-		
+			
+		//
+		// Save CDB to ring buf
+		//
+		SaveCdbToRingBuf(pCdb, cdbLength);
+
 	} while(FALSE);
 
 	//
@@ -529,6 +506,36 @@ RequestCompletionRoutine(
 	return;
 }
 
+VOID 
+DbgPrintCdb(PUCHAR pCdb, UCHAR CdbLength)
+{
+	char dbgBuffer[100];
+	char *pBufferPos = dbgBuffer;
+	for (int i = 0; i < CdbLength; i++)
+	{
+		RtlStringCchPrintfA(pBufferPos, 3 + 1, " %2x", pCdb[i]);
+		pBufferPos += 3;
+	}
+	pBufferPos[0] = 0;
+	DbgPrint("%s \n", dbgBuffer);
+}
+
+VOID 
+SaveCdbToRingBuf(PUCHAR pCdb, UCHAR CdbLength)
+{
+	DbgPrintCdb(pCdb, CdbLength);
+
+	// TODO: make the copy faster, not one byte by one byte
+	// Save data to CDB info to ring buffer		
+	RingBufPut(0x20); // magic number to 
+	RingBufPut(0x18);
+	RingBufPut(CdbLength);
+	for (int i = 0; i < CdbLength; i++)
+	{
+		RingBufPut(pCdb[i]);
+	}
+}
+
 
 //-------------------------------------------------------
 // Function Implementation, For control device queue
@@ -661,9 +668,9 @@ ControlDeviceEvtIoRead(
 	}
 
 	// Copy data byte by byte
-	// TODO: optimize it
-	size_t i;
-	for (i = 0; i < Length; i++) {
+	// TODO: optimize it		
+	size_t copied;
+	for (copied = 0; copied < Length; copied++) {
 		UCHAR data; 
 		if (!RingBufGet(&data)) {
 			break;
@@ -671,18 +678,18 @@ ControlDeviceEvtIoRead(
 		// Copy the memory out
 		status = WdfMemoryCopyFromBuffer(
 			memory,     // destination
-			i,          // offset into the destination memory
+			copied,     // offset into the destination memory
 			&data,      // source
 			1);         // copy one byte
 		if (!NT_SUCCESS(status)) {
 			KdPrint(("EchoEvtIoRead: WdfMemoryCopyFromBuffer failed 0x%x\n", status));
-
-			return;
+			break;
 		}
 	}
 
+	// 
 	// Set how many bytes are copied
-	WdfRequestSetInformation(Request, (ULONG_PTR)(i+1));
+	WdfRequestSetInformation(Request, (ULONG_PTR)copied);
 	
 	WdfRequestComplete(Request, status);
 
