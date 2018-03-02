@@ -23,7 +23,10 @@ Environment:
 
 #include "RingBuf.h"
 
-
+//-------------------------------------------------------
+// Macro
+//-------------------------------------------------------
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 //-------------------------------------------------------
 // Function Decldaration
@@ -175,7 +178,6 @@ StorTraceEvtIoInternalDeviceControl(
 	{
 		PIO_STACK_LOCATION  irpStack;
 		
-
 		// https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
 		irpStack = IoGetCurrentIrpStackLocation(WdfRequestWdmGetIrp(Request));
 		if (irpStack == NULL)
@@ -268,24 +270,12 @@ Return Value:
 {
 	WDFDEVICE                       device;
 	PDEVICE_CONTEXT                 context;
-	PIRP                            irp;
-	PIO_STACK_LOCATION              irpStack;
-
+	
     TraceEvents(TRACE_LEVEL_INFORMATION, 
                 TRACE_QUEUE, 
                 "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", 
-                Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);
-
+                Queue, Request, (int) OutputBufferLength, (int) InputBufferLength, IoControlCode);	
 	
-
-	irp = WdfRequestWdmGetIrp(Request);
-
-	irpStack = IoGetCurrentIrpStackLocation(irp);
-	if (irpStack == NULL)
-	{
-		DbgPrint("irpStack is null\n");		
-	}    
-
 	device = WdfIoQueueGetDevice(Queue);
 
 	context = DeviceGetContext(device);
@@ -301,28 +291,41 @@ Return Value:
 	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
 	//   https://github.com/Microsoft/Windows-driver-samples/blob/master/filesys/fastfat/devctrl.c 
 	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/wdf/wdm-equivalents-for-kmdf-buffer-pointers
 	//
 	do {
+		PVOID  buffer;
+		size_t  bufferSize;
+		NTSTATUS status;
+		size_t minSize;
+		PUCHAR  pCdb;
+		UCHAR cdbLength;
+
 		if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
 			DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT", IoControlCode);
 			break;
 		}
 
-		DbgPrint("%s  Major 0x%x , Minor 0x%x, length 0x%x\n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction, irpStack->Parameters.DeviceIoControl.InputBufferLength);
-		if (IRP_MN_SCSI_CLASS == irpStack->MinorFunction)
-		{
-
+		if (WdfRequestIsFrom32BitProcess(Request)) {
+			minSize = sizeof(SCSI_PASS_THROUGH_DIRECT32);
+		}
+		else {
+			minSize = sizeof(SCSI_PASS_THROUGH_DIRECT);
 		}
 
-		PUCHAR  pCdb;
-		UCHAR cdbLength;
-		if (IoIs32bitProcess(irp)) {
-			PSCSI_PASS_THROUGH_DIRECT32 pScsi = irp->AssociatedIrp.SystemBuffer;
+		status = WdfRequestRetrieveInputBuffer(Request, minSize, &buffer, &bufferSize);
+		if (!NT_SUCCESS(status)) {
+			DbgPrint("Cannot get the input buffer\n");
+			break;
+		}
+
+		if (WdfRequestIsFrom32BitProcess(Request)) {
+			PSCSI_PASS_THROUGH_DIRECT32 pScsi = buffer;
 			pCdb = pScsi->Cdb;
 			cdbLength = pScsi->CdbLength;
 		}
 		else {
-			PSCSI_PASS_THROUGH_DIRECT pScsi = irp->AssociatedIrp.SystemBuffer;
+			PSCSI_PASS_THROUGH_DIRECT pScsi = buffer;
 			pCdb = pScsi->Cdb;
 			cdbLength = pScsi->CdbLength;
 		}
