@@ -186,17 +186,18 @@ StorTraceEvtIoInternalDeviceControl(
 			break;
 		}
 
+		//
 		// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
-		// DbgPrint("Major 0x%x minor 0x%x, ", irpStack->MajorFunction, irpStack->MinorFunction);
-
+		// 
 		if (irpStack->MajorFunction != IRP_MJ_SCSI) {
-			DbgPrint("\n");
+			DbgPrint("%s Major 0x%x minor 0x%x \n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction);
 			break;
 		}
 
 		PUCHAR              cdb;
 		UCHAR               cdbLength;
 		PSCSI_REQUEST_BLOCK srb;
+		
 
 		srb = irpStack->Parameters.Scsi.Srb;
 		if (srb == NULL)
@@ -205,27 +206,40 @@ StorTraceEvtIoInternalDeviceControl(
 			break;
 		}
 
-		if (srb->Function != SRB_FUNCTION_EXECUTE_SCSI)
+		// Could be STORAGE_REQUEST_BLOCK, checking the function field
+		// https://www.osr.com/nt-insider/2014-issue4/win7-vs-win8-storport-miniports/
+		//
+		if (srb->Function == SRB_FUNCTION_EXECUTE_SCSI)
 		{
-			//
-			// we could have SRB_FUNCTION_STORAGE_REQUEST_BLOCK... etc
-			// currently, we only support SCSI
+			cdb = srb->Cdb;
+			cdbLength = srb->CdbLength;			
+		}
+		else if (srb->Function == SRB_FUNCTION_STORAGE_REQUEST_BLOCK)
+		{
+			//PSTORAGE_REQUEST_BLOCK  storRequestBlock;
+			//storRequestBlock = (PSTORAGE_REQUEST_BLOCK)srb;
+			//cdb = storRequestBlock->Cdb;
+			//cdbLength = storRequestBlock->CdbLength;
+			break;
+		}
+		else 
+		{
 			DbgPrint("srb function is 0x%x, not supported\n", srb->Function);
 			break;
 		}
 
-		cdb = srb->Cdb;
-		cdbLength = srb->CdbLength;
+
 		if (cdbLength == 0 || cdbLength > 16)
 		{
 			DbgPrint("CDB %2d bytes, abnormal!!", cdbLength);
 			break;
 		}
-		
+
 		//
 		// Save CDB to ring buf
 		//
 		SaveCdbToRingBuf(cdb, cdbLength);
+		
 
 	} while (FALSE);
 		
