@@ -163,8 +163,8 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
         //&GUID_DEVINTERFACE_STORAGEPORT,
         //&GUID_DEVINTERFACE_VOLUME,
         //&GUID_DEVINTERFACE_CDROM,
-
-        &GUID_DEVCLASS_DISKDRIVE,
+        
+		&GUID_DEVCLASS_DISKDRIVE,
         //&GUID_DEVCLASS_SCSIADAPTER,
         //&GUID_DEVCLASS_HDC,
     };
@@ -200,6 +200,9 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
         PrintUsage();
         return (0);
     }
+	
+	// Default we use lower filter
+	upperFilter = FALSE;
 
     for (argIndex = 1; argIndex < argc; argIndex++) {
 
@@ -211,6 +214,11 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             upperFilter = FALSE;
             printf("Using Lower Filters\n");
+
+		} else if (_tcscmp(argv[argIndex], _T("/upper")) == 0) {
+
+			upperFilter = TRUE;
+			printf("Using Upper Filters\n");
 
         } else if( _tcscmp(argv[argIndex], _T("/device")) == 0 ) {
 
@@ -259,7 +267,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
     // This outer loop steps through the array of device guid pointers that is
     // defined above main(). It was just the easiest way to deal with both
     // Disks and Volumes (and it is easy to add other types of devices)
-
+	UINT diskNum = 0;
     for(devGuidIndex = 0; devGuidIndex<numdeviceGuids; devGuidIndex++) {
 
         // get a list of devices which support the given interface
@@ -310,6 +318,8 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             // print the device name
             if( keepGoing && listDevices ) {
+				printf("Disk %d\n", diskNum);
+				diskNum++;
                 PrintDeviceName( devInfo, &devInfoData );
             }
 
@@ -609,33 +619,27 @@ PrintFilters(
     // get the list of filters
     LPTSTR buffer = GetFilters( DeviceInfoSet, DeviceInfoData, UpperFilters );
     LPTSTR filterName;
-    DWORD filterPosition;
+	PCHAR filterType = (UpperFilters) ? "upper" : "lower";
 
+	printf("  Filter %s: ", filterType);
     if( buffer == NULL )
     {
         // if there is no such value in the registry, then there are no upper
         // filter drivers loaded
-        printf("There are no");
-        if (UpperFilters) {
-            printf(" upper ");
-        }
-        else
-        {
-            printf(" lower ");
-        }
-        printf("filter drivers loaded for this device.\n");
+		
+
+		printf("None \n");	        
     }
     else
     {
-        // go through the multisz and print out each driver
-        filterPosition=0;
+        // go through the multisz and print out each driver        
         filterName = buffer;
         while( *filterName != _T('\0') )
         {
-            _tprintf(_T("%u: %s\n"), filterPosition, filterName);
-            filterName += _tcslen(filterName)+1;
-            filterPosition++;
+            _tprintf(_T("%s "), filterName);
+            filterName += _tcslen(filterName)+1;            
         }
+		printf("\n");
 
         // no need for buffer anymore
         free( buffer );
@@ -672,11 +676,11 @@ void PrintDeviceName(
 
     if (deviceFriendlyName)
     { 
-        _tprintf(_T("Friendly Name: %s\n"), deviceFriendlyName);
+        _tprintf(_T("  Friendly Name: %s\n"), deviceFriendlyName);
     }
     else
     {
-        _tprintf(_T("Friendly Name: None\n"));
+        _tprintf(_T("  Friendly Name: None\n"));
     }
 
     LPTSTR deviceDescription =
@@ -688,44 +692,44 @@ void PrintDeviceName(
 
     if (deviceDescription && regDataType == REG_SZ)
     {
-        _tprintf(_T("Description: %s\n"), deviceDescription);
+        _tprintf(_T("  Description: %s\n"), deviceDescription);
     }
     else
     {
-        _tprintf(_T("Description: None\n"));
+        _tprintf(_T("  Description: None\n"));
     }
     
+	if (deviceName == NULL)
+	{
+		printf("in PrintDeviceName(): registry key is NULL! error: %u\n",
+			GetLastError());
+		assert(FALSE);
+	}
+	assert(deviceName);
 
-    if( deviceName != NULL )
+
+    // just to make sure we are getting the expected type of buffer
+    if( regDataType != REG_SZ )
     {
-        // just to make sure we are getting the expected type of buffer
-        if( regDataType != REG_SZ )
-        {
-            printf("in PrintDeviceName(): registry key is not an SZ!\n");
-        }
-        else
-        {
-            // if the device name starts with \Device, cut that off (all
-            // devices will start with it, so it is redundant)
-
-            /*
-            if( _tcsncmp(deviceName, _T("\\Device"), 7) == 0 )
-            {
-                memmove(deviceName,
-                        deviceName+7,
-                        (_tcslen(deviceName)-6)*sizeof(_TCHAR) );
-            }
-            */
-
-            _tprintf(_T("%s\n"), deviceName);
-        }
-        free( deviceName );
+        printf("in PrintDeviceName(): registry key is not an SZ!\n");
     }
     else
     {
-        printf("in PrintDeviceName(): registry key is NULL! error: %u\n",
-               GetLastError());
+        // if the device name starts with \Device, cut that off (all
+        // devices will start with it, so it is redundant)
+
+        /*
+        if( _tcsncmp(deviceName, _T("\\Device"), 7) == 0 )
+        {
+            memmove(deviceName,
+                    deviceName+7,
+                    (_tcslen(deviceName)-6)*sizeof(_TCHAR) );
+        }
+        */
+
+        _tprintf(_T("  Device Name: %s\n"), deviceName);
     }
+    free( deviceName );
 
     return;
 }
@@ -1169,6 +1173,7 @@ void PrintUsage()
            " [/add filter]"
            " [/remove filter]"
            " [/lower]"
+		   " [/upper]"
            "\n\n");
     printf("If device_name is not supplied, settings will apply "
            "to all devices.\n");
