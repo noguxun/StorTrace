@@ -160,13 +160,13 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
     // disks and volumes on the system. Adding another GUID should "just work"
     static const GUID * deviceGuids[] = {
         //&GUID_DEVINTERFACE_DISK,
-		//&GUID_DEVINTERFACE_STORAGEPORT,
+        //&GUID_DEVINTERFACE_STORAGEPORT,
         //&GUID_DEVINTERFACE_VOLUME,
         //&GUID_DEVINTERFACE_CDROM,
 
-		&GUID_DEVCLASS_DISKDRIVE,
-		&GUID_DEVCLASS_SCSIADAPTER,
-		&GUID_DEVCLASS_HDC,
+        &GUID_DEVCLASS_DISKDRIVE,
+        //&GUID_DEVCLASS_SCSIADAPTER,
+        //&GUID_DEVCLASS_HDC,
     };
     static const int numdeviceGuids = sizeof(deviceGuids) / sizeof(LPGUID);
 
@@ -218,7 +218,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
             if( argIndex < argc ) {
                 deviceName = argv[argIndex];
-				_tprintf(_T("Device Name: %s\n"), deviceName);
+                _tprintf(_T("Device Name: %s\n"), deviceName);
             } else {
                 PrintUsage();
                 return (0);
@@ -267,7 +267,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
                                        NULL,
                                        NULL,
                                        DIGCF_PROFILE |
-                                       //DIGCF_DEVICEINTERFACE |									   
+                                       //DIGCF_DEVICEINTERFACE |                                       
                                        DIGCF_PRESENT );
 
         if( devInfo == INVALID_HANDLE_VALUE ) {
@@ -275,15 +275,15 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
             return (1);
         }
 
-		printf("---------------------------\n");
+        printf("---------------------------\n");
 
         // as per DDK docs on SetupDiEnumDeviceInfo
         devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
-		 
+         
         // step through the list of devices for this handle
         // get device info at index deviceIndex, the function returns FALSE
         // when there is no device at the given index.
-		
+        
         for( deviceIndex=0;
              SetupDiEnumDeviceInfo( devInfo, deviceIndex, &devInfoData );
              deviceIndex++ ) {
@@ -375,7 +375,7 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
 
         }
 
-		
+        
 
     } // loop for each GUID index
 
@@ -616,14 +616,14 @@ PrintFilters(
         // if there is no such value in the registry, then there are no upper
         // filter drivers loaded
         printf("There are no");
-		if (UpperFilters) {
-			printf(" upper ");
-		}
-		else
-		{
-			printf(" lower ");
-		}
-		printf("filter drivers loaded for this device.\n");
+        if (UpperFilters) {
+            printf(" upper ");
+        }
+        else
+        {
+            printf(" lower ");
+        }
+        printf("filter drivers loaded for this device.\n");
     }
     else
     {
@@ -663,38 +663,38 @@ void PrintDeviceName(
                                             SPDRP_PHYSICAL_DEVICE_OBJECT_NAME,
                                             &regDataType );
 
-	LPTSTR deviceFriendlyName =
-		(LPTSTR)GetDeviceRegistryProperty(
-			DeviceInfoSet,
-			DeviceInfoData,
-			SPDRP_FRIENDLYNAME,
-			&regDataType);
+    LPTSTR deviceFriendlyName =
+        (LPTSTR)GetDeviceRegistryProperty(
+            DeviceInfoSet,
+            DeviceInfoData,
+            SPDRP_FRIENDLYNAME,
+            &regDataType);
 
-	if (deviceFriendlyName)
-	{ 
-		_tprintf(_T("Friendly Name: %s\n"), deviceFriendlyName);
-	}
-	else
-	{
-		_tprintf(_T("Friendly Name: None\n"));
-	}
+    if (deviceFriendlyName)
+    { 
+        _tprintf(_T("Friendly Name: %s\n"), deviceFriendlyName);
+    }
+    else
+    {
+        _tprintf(_T("Friendly Name: None\n"));
+    }
 
-	LPTSTR deviceDescription =
-		(LPTSTR)GetDeviceRegistryProperty(
-			DeviceInfoSet,
-			DeviceInfoData,
-			SPDRP_DEVICEDESC,
-			&regDataType);
+    LPTSTR deviceDescription =
+        (LPTSTR)GetDeviceRegistryProperty(
+            DeviceInfoSet,
+            DeviceInfoData,
+            SPDRP_DEVICEDESC,
+            &regDataType);
 
-	if (deviceDescription && regDataType == REG_SZ)
-	{
+    if (deviceDescription && regDataType == REG_SZ)
+    {
         _tprintf(_T("Description: %s\n"), deviceDescription);
-	}
-	else
-	{
-		_tprintf(_T("Description: None\n"));
-	}
-	
+    }
+    else
+    {
+        _tprintf(_T("Description: None\n"));
+    }
+    
 
     if( deviceName != NULL )
     {
@@ -708,14 +708,14 @@ void PrintDeviceName(
             // if the device name starts with \Device, cut that off (all
             // devices will start with it, so it is redundant)
 
-			/*
+            /*
             if( _tcsncmp(deviceName, _T("\\Device"), 7) == 0 )
             {
                 memmove(deviceName,
                         deviceName+7,
                         (_tcslen(deviceName)-6)*sizeof(_TCHAR) );
             }
-			*/
+            */
 
             _tprintf(_T("%s\n"), deviceName);
         }
@@ -812,7 +812,7 @@ DeviceNameMatches(
 
             // do the strings match?
             matching = (_tcscmp(deviceName, DeviceName) == 0) ? TRUE : FALSE;
-			_tprintf(_T("comparing %s  to  %s\n"), deviceName, DeviceName);
+            _tprintf(_T("comparing %s  to  %s\n"), deviceName, DeviceName);
         }
         free( deviceName );
     }

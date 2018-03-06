@@ -35,7 +35,7 @@ StorTraceQueueInitialize(
 
 NTSTATUS
 StorTraceControlDeviceQueueInitialize(
-	_In_ WDFDEVICE Device
+    _In_ WDFDEVICE Device
 );
 
 //

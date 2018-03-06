@@ -28,6 +28,7 @@ Environment:
 //-------------------------------------------------------
 extern WDFCOLLECTION   DeviceCollection;
 extern WDFWAITLOCK     DeviceCollectionLock;
+extern WDFWAITLOCK     CdbSaveLock;
 
 
 //-------------------------------------------------------
@@ -80,13 +81,13 @@ Return Value:
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Entry");
 
-	DbgPrint("DriverEntry\n");	
+    DbgPrint("DriverEntry\n");    
 
-	// 
-	// Init ring buffer for data capture
-	// TODO: make it per-device? 
-	//
-	RingBufReset();
+    // 
+    // Init ring buffer for data capture
+    // TODO: make it per-device? 
+    //
+    RingBufReset();
 
     //
     // Register a cleanup callback so that we can call WPP_CLEANUP when
@@ -112,33 +113,41 @@ Return Value:
         return status;
     }
 
-	//
-	// Since there is only one control-device for all the instances
-	// of the physical device, we need an ability to get to particular instance
-	// of the device in our FilterEvtIoDeviceControlForControl. For that we
-	// will create a collection object and store filter device objects.        
-	// The collection object has the driver object as a default parent.
-	//
+    //
+    // Since there is only one control-device for all the instances
+    // of the physical device, we need an ability to get to particular instance
+    // of the device in our FilterEvtIoDeviceControlForControl. For that we
+    // will create a collection object and store filter device objects.        
+    // The collection object has the driver object as a default parent.
+    //
 
-	status = WdfCollectionCreate(WDF_NO_OBJECT_ATTRIBUTES,
-		&DeviceCollection);
-	if (!NT_SUCCESS(status))
-	{
-		DbgPrint("WdfCollectionCreate failed with status 0x%x\n", status);
-		WPP_CLEANUP(DriverObject);
-		return status;
-	}
+    status = WdfCollectionCreate(WDF_NO_OBJECT_ATTRIBUTES,
+        &DeviceCollection);
+    if (!NT_SUCCESS(status))
+    {
+        DbgPrint("WdfCollectionCreate failed with status 0x%x\n", status);
+        WPP_CLEANUP(DriverObject);
+        return status;
+    }
 
-	//
-	// The wait-lock object has the driver object as a default parent.
-	//
-	status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES,
-		&DeviceCollectionLock);
-	if (!NT_SUCCESS(status))
-	{
-		DbgPrint("WdfWaitLockCreate failed with status 0x%x\n", status);
-		return status;
-	}
+    //
+    // The wait-lock object has the driver object as a default parent.
+    //
+    status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES,
+        &DeviceCollectionLock);
+    if (!NT_SUCCESS(status))
+    {
+        DbgPrint("DeviceCollectionLock failed with status 0x%x\n", status);
+        return status;
+    }
+
+    status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES,
+        &CdbSaveLock);
+    if (!NT_SUCCESS(status))
+    {
+        DbgPrint("CdbSaveLock failed with status 0x%x\n", status);
+        return status;
+    }
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Exit");
 
@@ -173,7 +182,7 @@ Return Value:
 
     UNREFERENCED_PARAMETER(Driver);
 
-	DbgPrint("StorTraceEvtDeviceAdd\n");
+    DbgPrint("StorTraceEvtDeviceAdd\n");
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Entry");
 
