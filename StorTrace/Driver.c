@@ -39,6 +39,16 @@ extern WDFWAITLOCK     CdbSaveLock;
 #pragma alloc_text (INIT, DriverEntry)
 #endif
 
+VOID
+DriverUnload(
+	_In_
+	WDFDRIVER Driver
+)
+{
+	UNREFERENCED_PARAMETER(Driver);
+	DbgPrint("Driver Unload \n");
+}
+
 NTSTATUS
 DriverEntry(
     _In_ PDRIVER_OBJECT  DriverObject,
@@ -79,9 +89,7 @@ Return Value:
     //
     WPP_INIT_TRACING(DriverObject, RegistryPath);
 
-    TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Entry");
-
-    DbgPrint("DriverEntry\n");    
+    TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Entry");    
 
     // 
     // Init ring buffer for data capture
@@ -99,6 +107,9 @@ Return Value:
     WDF_DRIVER_CONFIG_INIT(&config,
                            StorTraceEvtDeviceAdd
                            );
+
+	// config.DriverInitFlags = WdfDriverInitNonPnpDriver;
+	config.EvtDriverUnload = DriverUnload;
 
     status = WdfDriverCreate(DriverObject,
                              RegistryPath,
@@ -151,6 +162,7 @@ Return Value:
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Exit");
 
+	DbgPrint("DriverEntry status 0x%x\n", status);
     return status;
 }
 

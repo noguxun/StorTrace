@@ -17,8 +17,11 @@ rem if  %errorlevel% neq 0 (
 rem   echo Service stop failed, continue to delete however
 rem )
 
+sc stop StorTrace
 sc delete StorTrace
 if  %errorlevel% neq 0 (
    echo Service Uninstallation failed
    exit /B 1
 )
+
+echo A reboot is normally required to reinstalled the StorTrace
