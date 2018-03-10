@@ -28,7 +28,7 @@ Reoot the PC after that.
 Attach the driver to a disk, to which you want to monitor. 
 You will see a list of disks, and you need input index of the disk. 
 ```
-> cd c:\StorTrace
+> cd c:\StorTrace 
 > install.bat
 Install StorTrace service
 [SC] CreateService SUCCESS
