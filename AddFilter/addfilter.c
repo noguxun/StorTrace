@@ -203,6 +203,7 @@ PrintDeviceInfoList(BOOLEAN UpperFilter)
 			SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
 			deviceIndex++) {
 			
+			printf("\n---------------------------------\n");
 			printf("Disk %d\n", DiskDeviceNum);
 
 			PrintDeviceName(devInfo, &devInfoData, (DiskDeviceName[DiskDeviceNum]));
@@ -210,8 +211,7 @@ PrintDeviceInfoList(BOOLEAN UpperFilter)
 
 			DiskDeviceNum++;
 
-			printf("\n\n");
-
+			printf("\n");
 		}
 
 		// clean up the device list
