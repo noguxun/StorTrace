@@ -66,7 +66,7 @@ VOID
 DbgPrintCdb(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
 
 VOID
-SaveCdbToRingBufEx(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength, _In_ PUCHAR SenseData, _In_ UCHAR SenseDataLength);
+SaveCdbToRingBufEx(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength, _In_ PUCHAR SenseData, _In_ UCHAR SenseDataLength, _In_ NTSTATUS status);
 
 VOID
 SaveCdbToRingBuf(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
@@ -576,7 +576,7 @@ CompletionIoCtlScsiPassThrDirect(
 		//
 		// Save CDB to ring buf
 		//
-		SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength);
+		SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength, CompletionParams->IoStatus.Status);
 
 	} while (FALSE);
 
@@ -604,28 +604,42 @@ DbgPrintCdb(PUCHAR pCdb, UCHAR CdbLength)
 VOID
 SaveCdbToRingBuf(PUCHAR Cdb, UCHAR CdbLength)
 {
-	SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0);
+	SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0, 0);
 }
 
 VOID 
-SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength)
+SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength, NTSTATUS status)
 {
 	WdfWaitLockAcquire(CdbSaveLock, NULL);
 
     DbgPrintCdb(Cdb, CdbLength);
 
     // TODO: make the copy faster, not one byte by one byte
-    // Save data to CDB info to ring buffer        
-    RingBufPut(0x20); // magic number to 
-    RingBufPut(0x18);
+    // Save data to CDB info to ring buffer
 
+	// Magic number 0xDEAF
+    RingBufPut(0xDE); 
+    RingBufPut(0xAF);
+
+	// Status code
+	RingBufPut((UCHAR)status);
+	RingBufPut((UCHAR)(status >> 8));
+	RingBufPut((UCHAR)(status >> 16));
+	RingBufPut((UCHAR)(status >> 24));
+	
+	// CDB length
     RingBufPut(CdbLength);
+
+	// Sense Data length
 	RingBufPut(SenseDataLength);
+
+	// CDB data
     for (UCHAR i = 0; i < CdbLength; i++)
     {
         RingBufPut(Cdb[i]);
     }
 
+	// Sense data (if any)
 	if (SenseDataLength)
 	{
 		// raw data
