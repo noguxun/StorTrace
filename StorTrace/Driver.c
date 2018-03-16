@@ -41,12 +41,12 @@ extern WDFWAITLOCK     CdbSaveLock;
 
 VOID
 DriverUnload(
-	_In_
-	WDFDRIVER Driver
+    _In_
+    WDFDRIVER Driver
 )
 {
-	UNREFERENCED_PARAMETER(Driver);
-	DbgPrint("Driver Unload \n");
+    UNREFERENCED_PARAMETER(Driver);
+    DbgPrint("Driver Unload \n");
 }
 
 NTSTATUS
@@ -108,8 +108,8 @@ Return Value:
                            StorTraceEvtDeviceAdd
                            );
 
-	// config.DriverInitFlags = WdfDriverInitNonPnpDriver;
-	config.EvtDriverUnload = DriverUnload;
+    // config.DriverInitFlags = WdfDriverInitNonPnpDriver;
+    config.EvtDriverUnload = DriverUnload;
 
     status = WdfDriverCreate(DriverObject,
                              RegistryPath,
@@ -162,7 +162,7 @@ Return Value:
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Exit");
 
-	DbgPrint("DriverEntry status 0x%x\n", status);
+    DbgPrint("DriverEntry status 0x%x\n", status);
     return status;
 }
 

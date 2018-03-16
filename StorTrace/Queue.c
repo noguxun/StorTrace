@@ -42,7 +42,7 @@ VOID
 ForwardRequestWithCompletion(
     IN WDFREQUEST Request,
     IN WDFIOTARGET Target,
-	IN PFN_WDF_REQUEST_COMPLETION_ROUTINE CompletionFunc
+    IN PFN_WDF_REQUEST_COMPLETION_ROUTINE CompletionFunc
 );
 
 VOID
@@ -301,52 +301,52 @@ StorTraceEvtIoInternalDeviceControl(
 
 VOID
 StorTraceEvtIoDeviceControl(
-	_In_ WDFQUEUE Queue,
-	_In_ WDFREQUEST Request,
-	_In_ size_t OutputBufferLength,
-	_In_ size_t InputBufferLength,
-	_In_ ULONG IoControlCode
+    _In_ WDFQUEUE Queue,
+    _In_ WDFREQUEST Request,
+    _In_ size_t OutputBufferLength,
+    _In_ size_t InputBufferLength,
+    _In_ ULONG IoControlCode
 )
 /*++
 
 Routine Description:
 
-	This event is invoked when the framework receives IRP_MJ_DEVICE_CONTROL request.
+    This event is invoked when the framework receives IRP_MJ_DEVICE_CONTROL request.
 
 Arguments:
 
-	Queue -  Handle to the framework queue object that is associated with the
-			 I/O request.
+    Queue -  Handle to the framework queue object that is associated with the
+             I/O request.
 
-	Request - Handle to a framework request object.
+    Request - Handle to a framework request object.
 
-	OutputBufferLength - Size of the output buffer in bytes
+    OutputBufferLength - Size of the output buffer in bytes
 
-	InputBufferLength - Size of the input buffer in bytes
+    InputBufferLength - Size of the input buffer in bytes
 
-	IoControlCode - I/O control code.
+    IoControlCode - I/O control code.
 
 Return Value:
 
-	VOID
+    VOID
 
 --*/
 {
-	WDFDEVICE device;
-	
-	TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_QUEUE, "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
+    WDFDEVICE device;
+    
+    TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_QUEUE, "%!FUNC! Queue 0x%p, Request 0x%p OutputBufferLength %d InputBufferLength %d IoControlCode %d", Queue, Request, (int)OutputBufferLength, (int)InputBufferLength, IoControlCode);
 
-	device = WdfIoQueueGetDevice(Queue);
+    device = WdfIoQueueGetDevice(Queue);
 
 
-	if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
-		DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT\n", IoControlCode);
-		ForwardRequest(Request, WdfDeviceGetIoTarget(device));
-	}
-	else
-	{
-		ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device), CompletionIoCtlScsiPassThrDirect);
-	}		
+    if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
+        DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT\n", IoControlCode);
+        ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+    }
+    else
+    {
+        ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device), CompletionIoCtlScsiPassThrDirect);
+    }        
 
     return;
 }
@@ -459,7 +459,7 @@ VOID
 ForwardRequestWithCompletion(
     IN WDFREQUEST Request,
     IN WDFIOTARGET Target,
-	PFN_WDF_REQUEST_COMPLETION_ROUTINE CompletionFunc
+    PFN_WDF_REQUEST_COMPLETION_ROUTINE CompletionFunc
 )
 {
     BOOLEAN ret;
@@ -472,7 +472,7 @@ ForwardRequestWithCompletion(
     WdfRequestFormatRequestUsingCurrentType(Request);
 
     WdfRequestSetCompletionRoutine(Request,
-		CompletionFunc,
+        CompletionFunc,
         WDF_NO_CONTEXT);
 
     ret = WdfRequestSend(Request,
@@ -497,88 +497,88 @@ CompletionIoCtlScsiPassThrDirect(
 )
 {
     UNREFERENCED_PARAMETER(Target);
-    UNREFERENCED_PARAMETER(Context);	
+    UNREFERENCED_PARAMETER(Context);    
 
-	// 
-	// Storage class drivers set the minor IRP number to IRP_MN_SCSI_CLASS to indicate that the request has been processed by a storage class driver. 
-	// Parameters.DeviceIoControl.InputBufferLength indicates the size, in bytes, of the buffer at Irp->AssociatedIrp.SystemBuffer, which must be at least 
-	//  (sense data size + sizeof (SCSI_PASS_THROUGH_DIRECT)). The size of the SCSI_PASS_THROUGH_DIRECT structure is fixed.
-	// For most public I / O control codes, device drivers transfer a small amount of data to or from the buffer at Irp->AssociatedIrp.SystemBuffer.
-	// Reference:
-	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
-	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ns-ntddscsi-_scsi_pass_through_direct
-	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
-	//   https://github.com/Microsoft/Windows-driver-samples/blob/master/filesys/fastfat/devctrl.c 
-	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
-	//   https://docs.microsoft.com/en-us/windows-hardware/drivers/wdf/wdm-equivalents-for-kmdf-buffer-pointers
-	//
-	do {
-		PVOID  buffer;
-		size_t  bufferSize;
-		NTSTATUS status;
-		size_t minSize;
-		PUCHAR pCdb;
-		UCHAR cdbLength;
-		PUCHAR senseData = NULL;
-		UCHAR senseLength = 0;
-		
-		PIRP irp = WdfRequestWdmGetIrp(Request);
-		PIO_STACK_LOCATION  irpStack = IoGetCurrentIrpStackLocation(irp);
-		if (irpStack->MajorFunction != IRP_MJ_DEVICE_CONTROL)
-		{
-			DbgPrint("Not IRP_MJ_DEVICE_CONTROL, type is %d\n", irpStack->MajorFunction);
-			break;
-		}
+    // 
+    // Storage class drivers set the minor IRP number to IRP_MN_SCSI_CLASS to indicate that the request has been processed by a storage class driver. 
+    // Parameters.DeviceIoControl.InputBufferLength indicates the size, in bytes, of the buffer at Irp->AssociatedIrp.SystemBuffer, which must be at least 
+    //  (sense data size + sizeof (SCSI_PASS_THROUGH_DIRECT)). The size of the SCSI_PASS_THROUGH_DIRECT structure is fixed.
+    // For most public I / O control codes, device drivers transfer a small amount of data to or from the buffer at Irp->AssociatedIrp.SystemBuffer.
+    // Reference:
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntddscsi/ns-ntddscsi-_scsi_pass_through_direct
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control
+    //   https://github.com/Microsoft/Windows-driver-samples/blob/master/filesys/fastfat/devctrl.c 
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+    //   https://docs.microsoft.com/en-us/windows-hardware/drivers/wdf/wdm-equivalents-for-kmdf-buffer-pointers
+    //
+    do {
+        PVOID  buffer;
+        size_t  bufferSize;
+        NTSTATUS status;
+        size_t minSize;
+        PUCHAR pCdb;
+        UCHAR cdbLength;
+        PUCHAR senseData = NULL;
+        UCHAR senseLength = 0;
+        
+        PIRP irp = WdfRequestWdmGetIrp(Request);
+        PIO_STACK_LOCATION  irpStack = IoGetCurrentIrpStackLocation(irp);
+        if (irpStack->MajorFunction != IRP_MJ_DEVICE_CONTROL)
+        {
+            DbgPrint("Not IRP_MJ_DEVICE_CONTROL, type is %d\n", irpStack->MajorFunction);
+            break;
+        }
 
-		if (WdfRequestIsFrom32BitProcess(Request)) {
-			minSize = sizeof(SCSI_PASS_THROUGH_DIRECT32);
-		}
-		else {
-			minSize = sizeof(SCSI_PASS_THROUGH_DIRECT);
-		}
+        if (WdfRequestIsFrom32BitProcess(Request)) {
+            minSize = sizeof(SCSI_PASS_THROUGH_DIRECT32);
+        }
+        else {
+            minSize = sizeof(SCSI_PASS_THROUGH_DIRECT);
+        }
 
-		status = WdfRequestRetrieveInputBuffer(Request, minSize, &buffer, &bufferSize);
-		if (!NT_SUCCESS(status)) {
-			DbgPrint("Cannot get the input buffer\n");
-			break;
-		}
+        status = WdfRequestRetrieveInputBuffer(Request, minSize, &buffer, &bufferSize);
+        if (!NT_SUCCESS(status)) {
+            DbgPrint("Cannot get the input buffer\n");
+            break;
+        }
 
-		if (WdfRequestIsFrom32BitProcess(Request)) {
-			PSCSI_PASS_THROUGH_DIRECT32 pScsi = buffer;
-			pCdb = pScsi->Cdb;
-			cdbLength = pScsi->CdbLength;
-			if (pScsi->SenseInfoLength)
-			{
-				senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
-				senseLength = pScsi->SenseInfoLength;
-			}
+        if (WdfRequestIsFrom32BitProcess(Request)) {
+            PSCSI_PASS_THROUGH_DIRECT32 pScsi = buffer;
+            pCdb = pScsi->Cdb;
+            cdbLength = pScsi->CdbLength;
+            if (pScsi->SenseInfoLength)
+            {
+                senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
+                senseLength = pScsi->SenseInfoLength;
+            }
 
-			DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);
-		}
-		else {
-			PSCSI_PASS_THROUGH_DIRECT pScsi = buffer;
-			pCdb = pScsi->Cdb;
-			cdbLength = pScsi->CdbLength;
-			if (pScsi->SenseInfoLength)
-			{
-				senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
-				senseLength = pScsi->SenseInfoLength;
-			}
-			DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);			
-		}
+            DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);
+        }
+        else {
+            PSCSI_PASS_THROUGH_DIRECT pScsi = buffer;
+            pCdb = pScsi->Cdb;
+            cdbLength = pScsi->CdbLength;
+            if (pScsi->SenseInfoLength)
+            {
+                senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
+                senseLength = pScsi->SenseInfoLength;
+            }
+            DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);            
+        }
 
-		if (cdbLength == 0 || cdbLength > 16)
-		{
-			DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
-			break;
-		}
+        if (cdbLength == 0 || cdbLength > 16)
+        {
+            DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
+            break;
+        }
 
-		//
-		// Save CDB to ring buf
-		//
-		SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength, CompletionParams->IoStatus.Status);
+        //
+        // Save CDB to ring buf
+        //
+        SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength, CompletionParams->IoStatus.Status);
 
-	} while (FALSE);
+    } while (FALSE);
 
     WdfRequestComplete(Request, CompletionParams->IoStatus.Status);
 
@@ -604,50 +604,46 @@ DbgPrintCdb(PUCHAR pCdb, UCHAR CdbLength)
 VOID
 SaveCdbToRingBuf(PUCHAR Cdb, UCHAR CdbLength)
 {
-	SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0, 0);
+    SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0, 0);
 }
 
 VOID 
 SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength, NTSTATUS status)
 {
-	WdfWaitLockAcquire(CdbSaveLock, NULL);
+    WdfWaitLockAcquire(CdbSaveLock, NULL);
 
     DbgPrintCdb(Cdb, CdbLength);
 
     // TODO: make the copy faster, not one byte by one byte
     // Save data to CDB info to ring buffer
 
-	// Magic number 0xDEAF
+    // Magic number 0xDEAF
     RingBufPut(0xDE); 
     RingBufPut(0xAF);
 
-	// Status code
-	RingBufPut((UCHAR)status);
-	RingBufPut((UCHAR)(status >> 8));
-	RingBufPut((UCHAR)(status >> 16));
-	RingBufPut((UCHAR)(status >> 24));
-	
-	// CDB length
+    // Status code
+    RingBufPut((UCHAR)status);
+    RingBufPut((UCHAR)(status >> 8));
+    RingBufPut((UCHAR)(status >> 16));
+    RingBufPut((UCHAR)(status >> 24));
+    
+    // CDB length
     RingBufPut(CdbLength);
 
-	// Sense Data length
-	RingBufPut(SenseDataLength);
+    // Sense Data length
+    RingBufPut(SenseDataLength);
 
-	// CDB data
-    for (UCHAR i = 0; i < CdbLength; i++)
+    // CDB data
+    RingBufPutEx(Cdb, CdbLength);
+
+    // Sense data (if any)
+    if (SenseDataLength)
     {
-        RingBufPut(Cdb[i]);
-    }
+        ASSERT(SenseData);
 
-	// Sense data (if any)
-	if (SenseDataLength)
-	{
-		// raw data
-		for (UCHAR i = 0; i < SenseDataLength; i++)
-		{
-			RingBufPut(SenseData[i]);
-		}
-	}
+        // raw data
+        RingBufPutEx(SenseData, SenseDataLength);
+    }
 
     WdfWaitLockRelease(CdbSaveLock);
 }

@@ -9,7 +9,14 @@
 #include "RingBuf.h"
 
 
-#define RING_BUF_SIZE  (100 * 1024)
+//=========================================
+// Macro definition
+//=========================================
+#define RING_BUF_SIZE  (10 * 1024)
+
+//=========================================
+// Data Type Definition
+//=========================================
 
 typedef struct _RING_BUF {
     UCHAR  Buffer[RING_BUF_SIZE];
@@ -18,20 +25,23 @@ typedef struct _RING_BUF {
     size_t  Size; //of the buffer
 } RING_BUFF;
 
+
+//=========================================
+// Function Declaration
+//=========================================
+static VOID
+InternalPut(UCHAR Data);
+
+//=========================================
+// Variable definition
+//=========================================
 static RING_BUFF RingBuf;
 static WDFWAITLOCK RingBufLock;
 
-static void 
-Lock(void)
-{
-    WdfWaitLockAcquire(RingBufLock, NULL);
-}
 
-static void 
-Unlock(void)
-{
-    WdfWaitLockRelease(RingBufLock);
-}
+//=========================================
+// Public Function
+//=========================================
 
 VOID
 RingBufReset(void)
@@ -63,28 +73,42 @@ RingBufIsFull(void)
     return ((RingBuf.Head + 1) % RingBuf.Size) == RingBuf.Tail;
 }
 
+
+VOID
+RingBufPutEx(PUCHAR Data, UINT32 DataLength)
+{    
+    if (FALSE)
+    //if ((RingBuf.Head + DataLength) < (RingBuf.Size - 1))
+    {
+        RtlCopyMemory(&(RingBuf.Buffer[RingBuf.Head]), Data, DataLength);
+        // if the head will cross the tail, meaning overwrite some data
+        if (RingBuf.Head < RingBuf.Tail && (RingBuf.Head + DataLength) >= RingBuf.Tail)
+        {
+            RingBuf.Tail = (RingBuf.Head + DataLength) + 1;
+        }
+
+        RingBuf.Head = (RingBuf.Head + DataLength);
+    }
+    else
+    {
+        for (UINT32 i = 0; i < DataLength; i++)
+        {
+            InternalPut(Data[i]);
+        }
+    }
+}
+
+
 VOID
 RingBufPut(UCHAR Data)
-{    
-    Lock();
-
-    RingBuf.Buffer[RingBuf.Head] = Data;
-    RingBuf.Head = (RingBuf.Head + 1) % RingBuf.Size;
-
-    if (RingBuf.Head == RingBuf.Tail)
-    {
-        RingBuf.Tail = (RingBuf.Tail + 1) % RingBuf.Size;
-    }
-
-    Unlock();
+{        
+    InternalPut(Data);
 }
 
 BOOLEAN
 RingBufGet(UCHAR *pData)
 {
     BOOLEAN r = FALSE;
-
-    Lock();
 
     if (pData && !RingBufIsEmpty())
     {
@@ -94,9 +118,21 @@ RingBufGet(UCHAR *pData)
         r = TRUE;
     }
 
-    Unlock();
-
     return r;
 }
 
 
+//=========================================
+//  Private function
+//=========================================
+VOID
+InternalPut(UCHAR Data)
+{
+    RingBuf.Buffer[RingBuf.Head] = Data;
+    RingBuf.Head = (RingBuf.Head + 1) % RingBuf.Size;
+
+    if (RingBuf.Head == RingBuf.Tail)
+    {
+        RingBuf.Tail = (RingBuf.Tail + 1) % RingBuf.Size;
+    }
+}

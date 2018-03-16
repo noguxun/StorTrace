@@ -73,14 +73,14 @@ static TCHAR DiskDeviceName[MAX_DISK_NUM][MAX_DEVICE_NAME_LEN];
 // these two constants are used to help enumerate through the list of all
 // disks and volumes on the system. Adding another GUID should "just work"
 static const GUID * DeviceGuids[] = {
-	//&GUID_DEVINTERFACE_DISK,
-	//&GUID_DEVINTERFACE_STORAGEPORT,
-	//&GUID_DEVINTERFACE_VOLUME,
-	//&GUID_DEVINTERFACE_CDROM,
+    //&GUID_DEVINTERFACE_DISK,
+    //&GUID_DEVINTERFACE_STORAGEPORT,
+    //&GUID_DEVINTERFACE_VOLUME,
+    //&GUID_DEVINTERFACE_CDROM,
 
-	&GUID_DEVCLASS_DISKDRIVE,
-	//&GUID_DEVCLASS_SCSIADAPTER,
-	//&GUID_DEVCLASS_HDC,
+    &GUID_DEVCLASS_DISKDRIVE,
+    //&GUID_DEVCLASS_SCSIADAPTER,
+    //&GUID_DEVCLASS_HDC,
 };
 static const int NumDeviceGuids = sizeof(DeviceGuids) / sizeof(LPGUID);
 
@@ -119,7 +119,7 @@ GetFilters(
 void PrintDeviceName(
     IN HDEVINFO DeviceInfoSet,
     IN PSP_DEVINFO_DATA DeviceInfoData,
-	LPTSTR DeviceName
+    LPTSTR DeviceName
     );
 
 BOOLEAN
@@ -168,234 +168,234 @@ PrintUsage();
 void
 PrintDeviceInfoList(BOOLEAN UpperFilter)
 {
-	// structs needed to contain information about devices
-	HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
-	SP_DEVINFO_DATA          devInfoData;
-	int deviceIndex;
-	int devGuidIndex;
+    // structs needed to contain information about devices
+    HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
+    SP_DEVINFO_DATA          devInfoData;
+    int deviceIndex;
+    int devGuidIndex;
 
-	//
-	// Print device List
-	//
-	for (devGuidIndex = 0; devGuidIndex < NumDeviceGuids; devGuidIndex++) {
+    //
+    // Print device List
+    //
+    for (devGuidIndex = 0; devGuidIndex < NumDeviceGuids; devGuidIndex++) {
 
-		// get a list of devices which support the given interface
-		devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
-			NULL,
-			NULL,
-			DIGCF_PROFILE |
-			//DIGCF_DEVICEINTERFACE |                                       
-			DIGCF_PRESENT);
+        // get a list of devices which support the given interface
+        devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
+            NULL,
+            NULL,
+            DIGCF_PROFILE |
+            //DIGCF_DEVICEINTERFACE |                                       
+            DIGCF_PRESENT);
 
-		if (devInfo == INVALID_HANDLE_VALUE) {
-			printf("got INVALID_HANDLE_VALUE!\n");
-			return;
-		}
+        if (devInfo == INVALID_HANDLE_VALUE) {
+            printf("got INVALID_HANDLE_VALUE!\n");
+            return;
+        }
 
-		// as per DDK docs on SetupDiEnumDeviceInfo
-		devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+        // as per DDK docs on SetupDiEnumDeviceInfo
+        devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
-		// step through the list of devices for this handle
-		// get device info at index deviceIndex, the function returns FALSE
-		// when there is no device at the given index.
+        // step through the list of devices for this handle
+        // get device info at index deviceIndex, the function returns FALSE
+        // when there is no device at the given index.
 
-		for (deviceIndex = 0;
-			SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
-			deviceIndex++) {
-			
-			printf("\n---------------------------------\n");
-			printf("Disk %d\n", DiskDeviceNum);
+        for (deviceIndex = 0;
+            SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
+            deviceIndex++) {
+            
+            printf("\n---------------------------------\n");
+            printf("Disk %d\n", DiskDeviceNum);
 
-			PrintDeviceName(devInfo, &devInfoData, (DiskDeviceName[DiskDeviceNum]));
-			PrintFilters(devInfo, &devInfoData, UpperFilter);
+            PrintDeviceName(devInfo, &devInfoData, (DiskDeviceName[DiskDeviceNum]));
+            PrintFilters(devInfo, &devInfoData, UpperFilter);
 
-			DiskDeviceNum++;
+            DiskDeviceNum++;
 
-			printf("\n");
-		}
+            printf("\n");
+        }
 
-		// clean up the device list
-		if (devInfo != INVALID_HANDLE_VALUE) {
+        // clean up the device list
+        if (devInfo != INVALID_HANDLE_VALUE) {
 
-			if (!SetupDiDestroyDeviceInfoList(devInfo)) {
-				printf("unable to delete device info list! error: %u\n",
-					GetLastError());
-			}
-		}
-	} // loop for each GUID index
+            if (!SetupDiDestroyDeviceInfoList(devInfo)) {
+                printf("unable to delete device info list! error: %u\n",
+                    GetLastError());
+            }
+        }
+    } // loop for each GUID index
 }
 
 
 BOOLEAN
 AddFilterByName(BOOLEAN UpperFilter, LPTSTR DeviceName, LPTSTR FilterName)
 {
-	// structs needed to contain information about devices
-	HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
-	SP_DEVINFO_DATA          devInfoData;
-	int deviceIndex;
-	int devGuidIndex;	
-	BOOLEAN needReboot = FALSE;
-	BOOLEAN filterAdded = FALSE;
+    // structs needed to contain information about devices
+    HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
+    SP_DEVINFO_DATA          devInfoData;
+    int deviceIndex;
+    int devGuidIndex;    
+    BOOLEAN needReboot = FALSE;
+    BOOLEAN filterAdded = FALSE;
 
-	if (DeviceName == NULL || FilterName == NULL)
-	{
-		printf("Invalide Device or Filter Name\n");
-		return FALSE;
-	}
+    if (DeviceName == NULL || FilterName == NULL)
+    {
+        printf("Invalide Device or Filter Name\n");
+        return FALSE;
+    }
 
-	// 
-	// Add filter
-	// 
-	for (devGuidIndex = 0; devGuidIndex<NumDeviceGuids; devGuidIndex++) {
+    // 
+    // Add filter
+    // 
+    for (devGuidIndex = 0; devGuidIndex<NumDeviceGuids; devGuidIndex++) {
 
-		// get a list of devices which support the given interface
-		devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
-			NULL,
-			NULL,
-			DIGCF_PROFILE |
-			//DIGCF_DEVICEINTERFACE |                                       
-			DIGCF_PRESENT);
+        // get a list of devices which support the given interface
+        devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
+            NULL,
+            NULL,
+            DIGCF_PROFILE |
+            //DIGCF_DEVICEINTERFACE |                                       
+            DIGCF_PRESENT);
 
-		if (devInfo == INVALID_HANDLE_VALUE) {
-			printf("got INVALID_HANDLE_VALUE!\n");
-			return FALSE;
-		}
+        if (devInfo == INVALID_HANDLE_VALUE) {
+            printf("got INVALID_HANDLE_VALUE!\n");
+            return FALSE;
+        }
 
-		// as per DDK docs on SetupDiEnumDeviceInfo
-		devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+        // as per DDK docs on SetupDiEnumDeviceInfo
+        devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
-		// step through the list of devices for this handle
-		// get device info at index deviceIndex, the function returns FALSE
-		// when there is no device at the given index.
+        // step through the list of devices for this handle
+        // get device info at index deviceIndex, the function returns FALSE
+        // when there is no device at the given index.
 
-		
+        
 
-		for (deviceIndex = 0;
-			SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
-			deviceIndex++) {
+        for (deviceIndex = 0;
+            SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
+            deviceIndex++) {
 
 
-			if (!DeviceNameMatches(devInfo, &devInfoData, DeviceName))
-			{
-				continue;
-			}
-			
+            if (!DeviceNameMatches(devInfo, &devInfoData, DeviceName))
+            {
+                continue;
+            }
+            
 
-			// add the filter, then try to restart the device		
-			if (AddFilterDriver(devInfo, &devInfoData, FilterName, UpperFilter)) {
-				filterAdded = TRUE;
-				if (!RestartDevice(devInfo, &devInfoData)) {
-					needReboot = TRUE;
-				}				
-			}
-			else {
-				printf("Unable to add filter!\n");
-			}
+            // add the filter, then try to restart the device        
+            if (AddFilterDriver(devInfo, &devInfoData, FilterName, UpperFilter)) {
+                filterAdded = TRUE;
+                if (!RestartDevice(devInfo, &devInfoData)) {
+                    needReboot = TRUE;
+                }                
+            }
+            else {
+                printf("Unable to add filter!\n");
+            }
 
-			break;
-		}
+            break;
+        }
 
-		// clean up the device list
-		if (devInfo != INVALID_HANDLE_VALUE) {
+        // clean up the device list
+        if (devInfo != INVALID_HANDLE_VALUE) {
 
-			if (!SetupDiDestroyDeviceInfoList(devInfo)) {
-				printf("unable to delete device info list! error: %u\n",
-					GetLastError());
-			}
-		}
+            if (!SetupDiDestroyDeviceInfoList(devInfo)) {
+                printf("unable to delete device info list! error: %u\n",
+                    GetLastError());
+            }
+        }
 
-		if (filterAdded)
-		{
-			break;
-		}
-	} // loop for each GUID index
+        if (filterAdded)
+        {
+            break;
+        }
+    } // loop for each GUID index
 
-	return needReboot;
+    return needReboot;
 }
 
 BOOLEAN
 RemoveFilterByName(BOOLEAN UpperFilter, LPTSTR DeviceName, LPTSTR FilterName)
 {
-	// structs needed to contain information about devices
-	HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
-	SP_DEVINFO_DATA          devInfoData;
-	int deviceIndex;
-	int devGuidIndex;
-	BOOLEAN needReboot = FALSE;
-	BOOLEAN filterRemoved = FALSE;
+    // structs needed to contain information about devices
+    HDEVINFO                 devInfo = INVALID_HANDLE_VALUE;
+    SP_DEVINFO_DATA          devInfoData;
+    int deviceIndex;
+    int devGuidIndex;
+    BOOLEAN needReboot = FALSE;
+    BOOLEAN filterRemoved = FALSE;
 
-	if (DeviceName == NULL || FilterName == NULL)
-	{
-		printf("Invalide Device or Filter Name\n");
-		return FALSE;
-	}
+    if (DeviceName == NULL || FilterName == NULL)
+    {
+        printf("Invalide Device or Filter Name\n");
+        return FALSE;
+    }
 
-	// 
-	// Add filter
-	// 
-	for (devGuidIndex = 0; devGuidIndex<NumDeviceGuids; devGuidIndex++) {
+    // 
+    // Add filter
+    // 
+    for (devGuidIndex = 0; devGuidIndex<NumDeviceGuids; devGuidIndex++) {
 
-		// get a list of devices which support the given interface
-		devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
-			NULL,
-			NULL,
-			DIGCF_PROFILE |
-			//DIGCF_DEVICEINTERFACE |                                       
-			DIGCF_PRESENT);
+        // get a list of devices which support the given interface
+        devInfo = SetupDiGetClassDevs(DeviceGuids[devGuidIndex],
+            NULL,
+            NULL,
+            DIGCF_PROFILE |
+            //DIGCF_DEVICEINTERFACE |                                       
+            DIGCF_PRESENT);
 
-		if (devInfo == INVALID_HANDLE_VALUE) {
-			printf("got INVALID_HANDLE_VALUE!\n");
-			return FALSE;
-		}
+        if (devInfo == INVALID_HANDLE_VALUE) {
+            printf("got INVALID_HANDLE_VALUE!\n");
+            return FALSE;
+        }
 
-		// as per DDK docs on SetupDiEnumDeviceInfo
-		devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+        // as per DDK docs on SetupDiEnumDeviceInfo
+        devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
-		// step through the list of devices for this handle
-		// get device info at index deviceIndex, the function returns FALSE
-		// when there is no device at the given index.
+        // step through the list of devices for this handle
+        // get device info at index deviceIndex, the function returns FALSE
+        // when there is no device at the given index.
 
-		for (deviceIndex = 0;
-			SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
-			deviceIndex++) {
-
-
-			if (!DeviceNameMatches(devInfo, &devInfoData, DeviceName))
-			{
-				continue;
-			}
+        for (deviceIndex = 0;
+            SetupDiEnumDeviceInfo(devInfo, deviceIndex, &devInfoData);
+            deviceIndex++) {
 
 
-			// add the filter, then try to restart the device		
-			if (RemoveFilterDriver(devInfo, &devInfoData, FilterName, UpperFilter)) {
-				filterRemoved = TRUE;
-				if (!RestartDevice(devInfo, &devInfoData)) {
-					needReboot = TRUE;
-				}
-			}
-			else {
-				printf("Unable to add filter!\n");
-			}
+            if (!DeviceNameMatches(devInfo, &devInfoData, DeviceName))
+            {
+                continue;
+            }
 
-			break;
-		}
 
-		// clean up the device list
-		if (devInfo != INVALID_HANDLE_VALUE) {
+            // add the filter, then try to restart the device        
+            if (RemoveFilterDriver(devInfo, &devInfoData, FilterName, UpperFilter)) {
+                filterRemoved = TRUE;
+                if (!RestartDevice(devInfo, &devInfoData)) {
+                    needReboot = TRUE;
+                }
+            }
+            else {
+                printf("Unable to add filter!\n");
+            }
 
-			if (!SetupDiDestroyDeviceInfoList(devInfo)) {
-				printf("unable to delete device info list! error: %u\n",
-					GetLastError());
-			}
-		}
+            break;
+        }
 
-		if (filterRemoved)
-		{
-			break;
-		}
-	} // loop for each GUID index
+        // clean up the device list
+        if (devInfo != INVALID_HANDLE_VALUE) {
 
-	return needReboot;
+            if (!SetupDiDestroyDeviceInfoList(devInfo)) {
+                printf("unable to delete device info list! error: %u\n",
+                    GetLastError());
+            }
+        }
+
+        if (filterRemoved)
+        {
+            break;
+        }
+    } // loop for each GUID index
+
+    return needReboot;
 }
 
 
@@ -437,9 +437,9 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
         PrintUsage();
         return (0);
     }
-	
-	// Default we use lower filter
-	upperFilter = FALSE;
+    
+    // Default we use lower filter
+    upperFilter = FALSE;
 
     for (argIndex = 1; argIndex < argc; argIndex++) {
 
@@ -452,10 +452,10 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
             upperFilter = FALSE;
             printf("Using Lower Filters\n");
 
-		} else if (_tcscmp(argv[argIndex], _T("/upper")) == 0) {
+        } else if (_tcscmp(argv[argIndex], _T("/upper")) == 0) {
 
-			upperFilter = TRUE;
-			printf("Using Upper Filters\n");
+            upperFilter = TRUE;
+            printf("Using Upper Filters\n");
 
         } else if( _tcscmp(argv[argIndex], _T("/device")) == 0 ) {
 
@@ -499,53 +499,53 @@ int __cdecl _tmain(int argc, _In_reads_(argc) LPTSTR argv[])
     //////////////////////////////////////////////////////
     // done parsing arguments, move onto the good stuff //
     //////////////////////////////////////////////////////
-	if (filterToAdd || filterToRemove)
-	{
+    if (filterToAdd || filterToRemove)
+    {
 
-		PrintDeviceInfoList(upperFilter);
+        PrintDeviceInfoList(upperFilter);
 
-		//
-		// Get user input
-		// 
-		UINT  deviceSelection = 1000;
-		do
-		{
-			_tprintf(_T("Input Device Index To Trace -->\n"));
-			_tscanf_s(_T("%d"), &deviceSelection);
+        //
+        // Get user input
+        // 
+        UINT  deviceSelection = 1000;
+        do
+        {
+            _tprintf(_T("Input Device Index To Trace -->\n"));
+            _tscanf_s(_T("%d"), &deviceSelection);
 
-			if (deviceSelection >= DiskDeviceNum)
-			{
-				printf("Selection not in range\n");
-			}
-			else
-			{
-				break;
-			}
-		} while (TRUE);
+            if (deviceSelection >= DiskDeviceNum)
+            {
+                printf("Selection not in range\n");
+            }
+            else
+            {
+                break;
+            }
+        } while (TRUE);
 
 
-		if (filterToAdd)
-		{
-			needReboot = AddFilterByName(upperFilter, DiskDeviceName[deviceSelection], filterToAdd);
-		}
-		else
-		{
-			needReboot = RemoveFilterByName(upperFilter, DiskDeviceName[deviceSelection], filterToRemove);
-		}
-	
-	}
-	else if (listDevices)
-	{
-		PrintDeviceInfoList(upperFilter);
-	}
-	
+        if (filterToAdd)
+        {
+            needReboot = AddFilterByName(upperFilter, DiskDeviceName[deviceSelection], filterToAdd);
+        }
+        else
+        {
+            needReboot = RemoveFilterByName(upperFilter, DiskDeviceName[deviceSelection], filterToRemove);
+        }
+    
+    }
+    else if (listDevices)
+    {
+        PrintDeviceInfoList(upperFilter);
+    }
+    
     if( needReboot ) {
         printf("One or more devices could not be restarted. The machine "
                 "must be restarted\n"
                 "in order for settings to take effect\n");
     } else {
         printf("Everything has completed normally.\n");        
-	}
+    }
 
     return (0);
 }
@@ -756,16 +756,16 @@ PrintFilters(
     // get the list of filters
     LPTSTR buffer = GetFilters( DeviceInfoSet, DeviceInfoData, UpperFilters );
     LPTSTR filterName;
-	PCHAR filterType = (UpperFilters) ? "upper" : "lower";
+    PCHAR filterType = (UpperFilters) ? "upper" : "lower";
 
-	printf("  Filter %s: ", filterType);
+    printf("  Filter %s: ", filterType);
     if( buffer == NULL )
     {
         // if there is no such value in the registry, then there are no upper
         // filter drivers loaded
-		
+        
 
-		printf("None \n");	        
+        printf("None \n");            
     }
     else
     {
@@ -776,7 +776,7 @@ PrintFilters(
             _tprintf(_T("%s "), filterName);
             filterName += _tcslen(filterName)+1;            
         }
-		printf("\n");
+        printf("\n");
 
         // no need for buffer anymore
         free( buffer );
@@ -795,7 +795,7 @@ PrintFilters(
 void PrintDeviceName(
     IN HDEVINFO DeviceInfoSet,
     IN PSP_DEVINFO_DATA DeviceInfoData,
-	LPTSTR DeviceName
+    LPTSTR DeviceName
     )
 {
     DWORD  regDataType;
@@ -837,13 +837,13 @@ void PrintDeviceName(
         _tprintf(_T("  Description: None\n"));
     }
     
-	if (deviceName == NULL)
-	{
-		printf("in PrintDeviceName(): registry key is NULL! error: %u\n",
-			GetLastError());
-		assert(FALSE);
-	}
-	assert(deviceName);
+    if (deviceName == NULL)
+    {
+        printf("in PrintDeviceName(): registry key is NULL! error: %u\n",
+            GetLastError());
+        assert(FALSE);
+    }
+    assert(deviceName);
 
 
     // just to make sure we are getting the expected type of buffer
@@ -853,19 +853,19 @@ void PrintDeviceName(
     }
     else
     {
-		_tprintf(_T("  Device Name: %s\n"), deviceName);
+        _tprintf(_T("  Device Name: %s\n"), deviceName);
 
         // if the device name starts with \Device, cut that off (all
         // devices will start with it, so it is redundant)
-	        
+            
         if( _tcsncmp(deviceName, _T("\\Device"), 7) == 0 )
         {
             memmove(deviceName,
                     deviceName+7,
                     (_tcslen(deviceName)-6)*sizeof(_TCHAR) );
-        }		
-		
-		memcpy(DeviceName, deviceName, (_tcslen(deviceName) + 1) * sizeof(_TCHAR));
+        }        
+        
+        memcpy(DeviceName, deviceName, (_tcslen(deviceName) + 1) * sizeof(_TCHAR));
     }
 
     free( deviceName );
@@ -1312,7 +1312,7 @@ void PrintUsage()
            " [/add filter]"
            " [/remove filter]"
            " [/lower]"
-		   " [/upper]"
+           " [/upper]"
            "\n\n");
     printf("If device_name is not supplied, settings will apply "
            "to all devices.\n");

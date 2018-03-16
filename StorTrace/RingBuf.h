@@ -14,3 +14,6 @@ RingBufPut(UCHAR Data);
 
 BOOLEAN
 RingBufGet(UCHAR *pData);
+
+VOID
+RingBufPutEx(PUCHAR Data, UINT32 DataLength);
