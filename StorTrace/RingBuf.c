@@ -36,7 +36,6 @@ InternalPut(UCHAR Data);
 // Variable definition
 //=========================================
 static RING_BUFF RingBuf;
-static WDFWAITLOCK RingBufLock;
 
 
 //=========================================
@@ -49,12 +48,6 @@ RingBufReset(void)
     RingBuf.Head = 0;
     RingBuf.Tail = 0;
     RingBuf.Size = RING_BUF_SIZE;
-
-    NTSTATUS status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &RingBufLock);
-    if (!NT_SUCCESS(status))
-    {
-        DbgPrint("RingBufLock failed with status 0x%x\n", status);
-    }
 }
 
 BOOLEAN

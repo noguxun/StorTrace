@@ -35,7 +35,7 @@ Environment:
 //
 WDFCOLLECTION   DeviceCollection;
 WDFWAITLOCK     DeviceCollectionLock;
-WDFWAITLOCK     CdbSaveLock;
+WDFSPINLOCK     CdbBufSpinLock;
 WDFDEVICE       ControlDevice = NULL;
 
 //-------------------------------------------------------

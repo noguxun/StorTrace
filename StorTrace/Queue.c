@@ -32,20 +32,20 @@ Environment:
 //-------------------------------------------------------
 // Function Decldaration
 //-------------------------------------------------------
-VOID
+static VOID
 ForwardRequest(
     IN WDFREQUEST Request,
     IN WDFIOTARGET Target
 );
 
-VOID
+static VOID
 ForwardRequestWithCompletion(
     IN WDFREQUEST Request,
     IN WDFIOTARGET Target,
     IN PFN_WDF_REQUEST_COMPLETION_ROUTINE CompletionFunc
 );
 
-VOID
+static VOID
 CompletionIoCtlScsiPassThrDirect(
     IN WDFREQUEST                  Request,
     IN WDFIOTARGET                 Target,
@@ -53,7 +53,7 @@ CompletionIoCtlScsiPassThrDirect(
     IN WDFCONTEXT                  Context
 );
 
-VOID
+static VOID
 ControlDeviceEvtIoDeviceControl(
     _In_ WDFQUEUE Queue,
     _In_ WDFREQUEST Request,
@@ -62,20 +62,23 @@ ControlDeviceEvtIoDeviceControl(
     _In_ ULONG IoControlCode
 );
 
-VOID
+static VOID
 DbgPrintCdb(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
 
-VOID
+static VOID
 SaveCdbToRingBufEx(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength, _In_ PUCHAR SenseData, _In_ UCHAR SenseDataLength, _In_ NTSTATUS status);
 
-VOID
+static VOID
 SaveCdbToRingBuf(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
+
+static BOOLEAN
+GetByteFromRingBuf(_Out_ PUCHAR Data);
 //-------------------------------------------------------
 // Imported Function & Variable Declaration
 //-------------------------------------------------------
 extern WDFCOLLECTION   DeviceCollection;
 extern WDFWAITLOCK     DeviceCollectionLock;
-extern WDFWAITLOCK     CdbSaveLock;
+extern WDFSPINLOCK     CdbBufSpinLock;
 
 
 //-------------------------------------------------------
@@ -126,7 +129,7 @@ StorTraceQueueInitialize(
 
 VOID
 StorTraceEvtIoRead(
-    _In_     WDFQUEUE Queue,
+    _In_    WDFQUEUE Queue,
     _In_    WDFREQUEST Request,
     _In_    size_t Length
 )
@@ -134,7 +137,7 @@ StorTraceEvtIoRead(
     WDFDEVICE                       device;
 
     device = WdfIoQueueGetDevice(Queue);
-    DbgPrint("%s, length 0x%x \n", __FUNCTION__, Length);
+    DbgPrint("%s, length 0x%x \n", __FUNCTION__, (int)Length);
 
     ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -151,7 +154,7 @@ StorTraceEvtIoWrite(
     WDFDEVICE                       device;
 
     device = WdfIoQueueGetDevice(Queue);
-    DbgPrint("%s, length 0x%x \n", __FUNCTION__, Length);
+    DbgPrint("%s, length 0x%x \n", __FUNCTION__, (int)Length);
 
     ForwardRequest(Request, WdfDeviceGetIoTarget(device));
 
@@ -582,8 +585,6 @@ CompletionIoCtlScsiPassThrDirect(
 
     WdfRequestComplete(Request, CompletionParams->IoStatus.Status);
 
-    DbgPrint("%s status 0X%p\n", __FUNCTION__, CompletionParams->IoStatus.Status);
-
     return;
 }
 
@@ -601,6 +602,19 @@ DbgPrintCdb(PUCHAR pCdb, UCHAR CdbLength)
     DbgPrint("%s \n", dbgBuffer);
 }
 
+BOOLEAN
+GetByteFromRingBuf(PUCHAR Data)
+{
+    BOOLEAN success;
+    WdfSpinLockAcquire(CdbBufSpinLock);
+
+    success = RingBufGet(Data);
+
+    WdfSpinLockRelease(CdbBufSpinLock);
+
+    return success;
+}
+
 VOID
 SaveCdbToRingBuf(PUCHAR Cdb, UCHAR CdbLength)
 {
@@ -610,7 +624,7 @@ SaveCdbToRingBuf(PUCHAR Cdb, UCHAR CdbLength)
 VOID 
 SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength, NTSTATUS status)
 {
-    WdfWaitLockAcquire(CdbSaveLock, NULL);
+    WdfSpinLockAcquire(CdbBufSpinLock);
 
     DbgPrintCdb(Cdb, CdbLength);
 
@@ -645,7 +659,7 @@ SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDat
         RingBufPutEx(SenseData, SenseDataLength);
     }
 
-    WdfWaitLockRelease(CdbSaveLock);
+    WdfSpinLockRelease(CdbBufSpinLock);
 }
 
 
@@ -784,7 +798,7 @@ ControlDeviceEvtIoRead(
     size_t copied;
     for (copied = 0; copied < Length; copied++) {
         UCHAR data; 
-        if (!RingBufGet(&data)) {
+        if (!GetByteFromRingBuf(&data)) {
             break;
         }
         // Copy the memory out

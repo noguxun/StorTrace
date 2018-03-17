@@ -28,7 +28,7 @@ Environment:
 //-------------------------------------------------------
 extern WDFCOLLECTION   DeviceCollection;
 extern WDFWAITLOCK     DeviceCollectionLock;
-extern WDFWAITLOCK     CdbSaveLock;
+extern WDFSPINLOCK     CdbBufSpinLock;
 
 
 //-------------------------------------------------------
@@ -144,19 +144,17 @@ Return Value:
     //
     // The wait-lock object has the driver object as a default parent.
     //
-    status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES,
-        &DeviceCollectionLock);
+    status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &DeviceCollectionLock);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("DeviceCollectionLock failed with status 0x%x\n", status);
         return status;
     }
 
-    status = WdfWaitLockCreate(WDF_NO_OBJECT_ATTRIBUTES,
-        &CdbSaveLock);
+    status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &CdbBufSpinLock);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("CdbSaveLock failed with status 0x%x\n", status);
+        DbgPrint("CdbBufSpinLock failed with status 0x%x\n", status);
         return status;
     }
 
