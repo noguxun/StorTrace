@@ -21,6 +21,7 @@ Environment:
 #include "ntstrsafe.h"
 #include "ntddscsi.h"
 #include "scsi.h"
+#include "srbhelper.h"
 
 #include "RingBuf.h"
 
@@ -46,12 +47,21 @@ ForwardRequestWithCompletion(
 );
 
 static VOID
-CompletionIoCtlScsiPassThrDirect(
+CompletionDevCtlScsiPassThrDirect(
     IN WDFREQUEST                  Request,
     IN WDFIOTARGET                 Target,
     PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
     IN WDFCONTEXT                  Context
 );
+
+static VOID
+CompletionInternalDevCtl(
+    IN WDFREQUEST                  Request,
+    IN WDFIOTARGET                 Target,
+    PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
+    IN WDFCONTEXT                  Context
+);
+
 
 static VOID
 ControlDeviceEvtIoDeviceControl(
@@ -66,7 +76,7 @@ static VOID
 DbgPrintCdb(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
 
 static VOID
-SaveCdbToRingBufEx(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength, _In_ PUCHAR SenseData, _In_ UCHAR SenseDataLength, _In_ NTSTATUS status);
+SaveCdbToRingBufEx(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength, _In_ PUCHAR SenseData, _In_ UCHAR SenseDataLength, _In_ NTSTATUS ntStatus, _In_ UCHAR scsiStatus);
 
 static VOID
 SaveCdbToRingBuf(_In_ PUCHAR pCdb, _In_ UCHAR CdbLength);
@@ -171,134 +181,17 @@ StorTraceEvtIoInternalDeviceControl(
     _In_ ULONG IoControlCode
 )
 {
-    WDFDEVICE                       device;
+    WDFDEVICE  device = WdfIoQueueGetDevice(Queue);
     
-
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(InputBufferLength);
-    UNREFERENCED_PARAMETER(IoControlCode);
+    UNREFERENCED_PARAMETER(IoControlCode);    
 
-    device = WdfIoQueueGetDevice(Queue);
-
-    DbgPrint("%s \n", __FUNCTION__);
-
+    // IoControlCode here is normally 0
+    DbgPrint("%s IoControl Code %x \n", __FUNCTION__, IoControlCode);
+              
+    ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device), CompletionInternalDevCtl);
     
-    do
-    {
-        PIO_STACK_LOCATION  irpStack;
-        
-        // https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
-        irpStack = IoGetCurrentIrpStackLocation(WdfRequestWdmGetIrp(Request));
-        if (irpStack == NULL)
-        {
-            DbgPrint("irpStack is null\n");
-            break;
-        }
-
-        //
-        // https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
-        // 
-        if (irpStack->MajorFunction != IRP_MJ_SCSI) {
-            DbgPrint("%s Major 0x%x minor 0x%x \n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction);
-            break;
-        }
-
-
-        PSCSI_REQUEST_BLOCK srb;
-        PUCHAR cdb;
-        UCHAR cdbLength;
-
-        srb = irpStack->Parameters.Scsi.Srb;
-        if (srb == NULL)
-        {
-            DbgPrint("srb is null\n");
-            break;
-        }
-
-        // Could be STORAGE_REQUEST_BLOCK, checking the function field
-        // https://www.osr.com/nt-insider/2014-issue4/win7-vs-win8-storport-miniports/
-        //
-        if (srb->Function == SRB_FUNCTION_EXECUTE_SCSI)
-        {                  
-            cdb = srb->Cdb;
-            cdbLength = srb->CdbLength;
-
-            if (cdbLength == 0 || cdbLength > 16)
-            {
-                DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
-                break;
-            }
-
-            SaveCdbToRingBuf(cdb, cdbLength);
-        }
-        else if (srb->Function == SRB_FUNCTION_STORAGE_REQUEST_BLOCK)
-        {
-            PSTORAGE_REQUEST_BLOCK  storRequestBlock = (PSTORAGE_REQUEST_BLOCK)srb;            
-
-            DbgPrint("NumSrbExData %d \n", storRequestBlock->NumSrbExData);
-
-            for (ULONG srbExDataIndex = 0; srbExDataIndex < storRequestBlock->NumSrbExData; srbExDataIndex++)
-            {
-
-                PSRBEX_DATA srbExDataTmp = (PSRBEX_DATA)((PUCHAR)storRequestBlock + storRequestBlock->SrbExDataOffset[srbExDataIndex]);
-                DbgPrint("SrbExType %x \n", srbExDataTmp->Type);
-
-                if (srbExDataTmp->Type == SrbExDataTypeScsiCdb16) 
-                {
-                    PSRBEX_DATA_SCSI_CDB16 srbExCdb16 = (PSRBEX_DATA_SCSI_CDB16)srbExDataTmp;
-
-                    cdb = srbExCdb16->Cdb;
-                    cdbLength = srbExCdb16->CdbLength;
-
-                    if (cdbLength == 0 || cdbLength > 16)
-                    {
-                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
-                        break;
-                    }                    
-                }
-                else if (srbExDataTmp->Type == SrbExDataTypeScsiCdb32)
-                {
-                    PSRBEX_DATA_SCSI_CDB32 srbExCdb32 = (PSRBEX_DATA_SCSI_CDB32)srbExDataTmp;
-
-                    cdb = srbExCdb32->Cdb;
-                    cdbLength = srbExCdb32->CdbLength;
-
-                    if (cdbLength == 0 || cdbLength > 32)
-                    {
-                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
-                        break;
-                    }                    
-                }                
-                else if (srbExDataTmp->Type == SrbExDataTypeScsiCdbVar)
-                {
-                    PSRBEX_DATA_SCSI_CDB_VAR srbExCdbVar = (PSRBEX_DATA_SCSI_CDB_VAR)srbExDataTmp;
-
-                    cdb = srbExCdbVar->Cdb;
-                    cdbLength = (srbExCdbVar->CdbLength > 255) ? 255 : (UCHAR)srbExCdbVar->CdbLength;                    
-
-                    if (cdbLength == 0)
-                    {
-                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
-                        break;
-                    }                    
-                }
-                else {
-                    continue;
-                }
-
-                SaveCdbToRingBuf(cdb, cdbLength);
-            }        
-        }
-        else 
-        {
-            DbgPrint("srb function is 0x%x, not supported\n", srb->Function);
-            break;
-        }
-    } while (FALSE);
-        
-
-    ForwardRequest(Request, WdfDeviceGetIoTarget(device));
-
     return;
 }
 
@@ -342,13 +235,13 @@ Return Value:
     device = WdfIoQueueGetDevice(Queue);
 
 
-    if (IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) {
-        DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT\n", IoControlCode);
-        ForwardRequest(Request, WdfDeviceGetIoTarget(device));
+    if (IoControlCode == IOCTL_SCSI_PASS_THROUGH_DIRECT) {
+        ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device), CompletionDevCtlScsiPassThrDirect);        
     }
     else
     {
-        ForwardRequestWithCompletion(Request, WdfDeviceGetIoTarget(device), CompletionIoCtlScsiPassThrDirect);
+        DbgPrint("IoControlCode 0x%x, not IOCTL_SCSI_PASS_THROUGH_DIRECT\n", IoControlCode);
+        ForwardRequest(Request, WdfDeviceGetIoTarget(device));
     }        
 
     return;
@@ -491,8 +384,164 @@ ForwardRequestWithCompletion(
     return;
 }
 
+static VOID
+CompletionInternalDevCtl(
+    IN WDFREQUEST                  Request,
+    IN WDFIOTARGET                 Target,
+    PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
+    IN WDFCONTEXT                  Context
+)
+{
+    UNREFERENCED_PARAMETER(Target);
+    UNREFERENCED_PARAMETER(Context); 
+
+    // Reference, function SrbGetScsiData() in srbhelper.h
+    do
+    {
+        PIO_STACK_LOCATION  irpStack;
+
+        // https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storage-filter-driver-s-dispatch-routines
+        irpStack = IoGetCurrentIrpStackLocation(WdfRequestWdmGetIrp(Request));
+        if (irpStack == NULL)
+        {
+            DbgPrint("irpStack is null\n");
+            break;
+        }
+
+        //
+        // https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_io_stack_location
+        // 
+        if (irpStack->MajorFunction != IRP_MJ_SCSI) {
+            DbgPrint("%s Major 0x%x minor 0x%x \n", __FUNCTION__, irpStack->MajorFunction, irpStack->MinorFunction);
+            break;
+        }
+
+
+        PSCSI_REQUEST_BLOCK srb;
+        PUCHAR cdb;
+        UCHAR cdbLength;
+        UCHAR scsiStatus;
+        PUCHAR senseData;
+        UCHAR senseDataLength;
+
+        
+        srb = irpStack->Parameters.Scsi.Srb;
+        if (srb == NULL)
+        {
+            DbgPrint("srb is null\n");
+            break;
+        }
+
+        // Could be STORAGE_REQUEST_BLOCK, checking the function field
+        // https://www.osr.com/nt-insider/2014-issue4/win7-vs-win8-storport-miniports/
+        //
+        if (srb->Function == SRB_FUNCTION_EXECUTE_SCSI)
+        {
+            cdb = srb->Cdb;
+            cdbLength = srb->CdbLength;
+            senseData = srb->SenseInfoBuffer;
+            senseDataLength = srb->SenseInfoBufferLength;
+            scsiStatus = srb->ScsiStatus;
+
+            if (cdbLength == 0 || cdbLength > 16)
+            {
+                DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
+                break;
+            }
+
+            DbgPrint("SRB_FUNCTION_EXECUTE_SCSI complete  buffer %p, senseInfoLength %x, status %x \n", srb->SenseInfoBuffer, srb->SenseInfoBufferLength, srb->ScsiStatus);
+
+            SaveCdbToRingBufEx(cdb, cdbLength, senseData, senseDataLength, CompletionParams->IoStatus.Status, scsiStatus);
+        }
+        else if (srb->Function == SRB_FUNCTION_STORAGE_REQUEST_BLOCK)
+        {
+
+            PSTORAGE_REQUEST_BLOCK  storRequestBlock = (PSTORAGE_REQUEST_BLOCK)srb;
+
+            DbgPrint("NumSrbExData %d \n", storRequestBlock->NumSrbExData);
+
+            for (ULONG srbExDataIndex = 0; srbExDataIndex < storRequestBlock->NumSrbExData; srbExDataIndex++)
+            {
+
+                PSRBEX_DATA srbExDataTmp = (PSRBEX_DATA)((PUCHAR)storRequestBlock + storRequestBlock->SrbExDataOffset[srbExDataIndex]);
+                DbgPrint("SrbExType %x \n", srbExDataTmp->Type);
+
+                if (srbExDataTmp->Type == SrbExDataTypeScsiCdb16)
+                {
+                    PSRBEX_DATA_SCSI_CDB16 srbEx = (PSRBEX_DATA_SCSI_CDB16)srbExDataTmp;
+
+                    cdb = srbEx->Cdb;
+                    cdbLength = srbEx->CdbLength;
+                    senseData = srbEx->SenseInfoBuffer;
+                    senseDataLength = srbEx->SenseInfoBufferLength;
+                    scsiStatus = srb->ScsiStatus;
+
+                    DbgPrint("scsi status %x, sensebuf %p, senseLength %d\n", srbEx->ScsiStatus, srbEx->SenseInfoBuffer, srbEx->SenseInfoBufferLength);
+
+                    if (cdbLength == 0 || cdbLength > 16)
+                    {
+                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
+                        break;
+                    }
+                }
+                else if (srbExDataTmp->Type == SrbExDataTypeScsiCdb32)
+                {
+                    PSRBEX_DATA_SCSI_CDB32 srbEx = (PSRBEX_DATA_SCSI_CDB32)srbExDataTmp;
+
+                    cdb = srbEx->Cdb;
+                    cdbLength = srbEx->CdbLength;
+                    senseData = srbEx->SenseInfoBuffer;
+                    senseDataLength = srbEx->SenseInfoBufferLength;
+                    scsiStatus = srb->ScsiStatus;
+
+                    DbgPrint("scsi status %x, sensebuf %p, senseLength %d\n", srbEx->ScsiStatus, srbEx->SenseInfoBuffer, srbEx->SenseInfoBufferLength);
+
+                    if (cdbLength == 0 || cdbLength > 32)
+                    {
+                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
+                        break;
+                    }
+                }
+                else if (srbExDataTmp->Type == SrbExDataTypeScsiCdbVar)
+                {
+                    PSRBEX_DATA_SCSI_CDB_VAR srbEx = (PSRBEX_DATA_SCSI_CDB_VAR)srbExDataTmp;
+
+                    cdb = srbEx->Cdb;
+                    cdbLength = (srbEx->CdbLength > 255) ? 255 : (UCHAR)srbEx->CdbLength;
+                    senseData = srbEx->SenseInfoBuffer;
+                    senseDataLength = srbEx->SenseInfoBufferLength;
+                    scsiStatus = srb->ScsiStatus;
+
+                    DbgPrint("scsi status %x, sensebuf %p, senseLength %d\n", srbEx->ScsiStatus, srbEx->SenseInfoBuffer, srbEx->SenseInfoBufferLength);
+                    
+
+                    if (cdbLength == 0)
+                    {
+                        DbgPrint("CDB %2d bytes, abnormal!!\n", cdbLength);
+                        break;
+                    }
+                }
+                else {
+                    continue;
+                }
+
+                SaveCdbToRingBufEx(cdb, cdbLength, senseData, senseDataLength, CompletionParams->IoStatus.Status, scsiStatus);
+                // SaveCdbToRingBuf(cdb, cdbLength);
+            }
+        }
+        else
+        {
+            DbgPrint("srb function is 0x%x, not supported\n", srb->Function);
+            break;
+        }
+    } while (FALSE);
+
+    WdfRequestComplete(Request, CompletionParams->IoStatus.Status);
+    return;
+}
+
 VOID
-CompletionIoCtlScsiPassThrDirect(
+CompletionDevCtlScsiPassThrDirect(
     IN WDFREQUEST                  Request,
     IN WDFIOTARGET                 Target,
     PWDF_REQUEST_COMPLETION_PARAMS CompletionParams,
@@ -524,6 +573,7 @@ CompletionIoCtlScsiPassThrDirect(
         UCHAR cdbLength;
         PUCHAR senseData = NULL;
         UCHAR senseLength = 0;
+        UCHAR scsiStatus;
         
         PIRP irp = WdfRequestWdmGetIrp(Request);
         PIO_STACK_LOCATION  irpStack = IoGetCurrentIrpStackLocation(irp);
@@ -550,24 +600,29 @@ CompletionIoCtlScsiPassThrDirect(
             PSCSI_PASS_THROUGH_DIRECT32 pScsi = buffer;
             pCdb = pScsi->Cdb;
             cdbLength = pScsi->CdbLength;
+            scsiStatus = pScsi->ScsiStatus;
+
+            if (pScsi->SenseInfoLength)
+            {
+                senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
+                senseLength = pScsi->SenseInfoLength;                
+            }
+
+            DbgPrint("senseLen %d, senseOffset %d, scsiStatus %x \n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset, pScsi->ScsiStatus);
+        }
+        else {
+            PSCSI_PASS_THROUGH_DIRECT pScsi = buffer;
+            pCdb = pScsi->Cdb;
+            cdbLength = pScsi->CdbLength;
+            scsiStatus = pScsi->ScsiStatus;
+
             if (pScsi->SenseInfoLength)
             {
                 senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
                 senseLength = pScsi->SenseInfoLength;
             }
 
-            DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);
-        }
-        else {
-            PSCSI_PASS_THROUGH_DIRECT pScsi = buffer;
-            pCdb = pScsi->Cdb;
-            cdbLength = pScsi->CdbLength;
-            if (pScsi->SenseInfoLength)
-            {
-                senseData = ((PUCHAR)pScsi + pScsi->SenseInfoOffset);
-                senseLength = pScsi->SenseInfoLength;
-            }
-            DbgPrint("senseLen %d, offsetset %d\n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset);            
+            DbgPrint("senseLen %d, senseOffset %d, scsiStatus %x \n", pScsi->SenseInfoLength, pScsi->SenseInfoOffset, pScsi->ScsiStatus);            
         }
 
         if (cdbLength == 0 || cdbLength > 16)
@@ -579,7 +634,7 @@ CompletionIoCtlScsiPassThrDirect(
         //
         // Save CDB to ring buf
         //
-        SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength, CompletionParams->IoStatus.Status);
+        SaveCdbToRingBufEx(pCdb, cdbLength, senseData, senseLength, CompletionParams->IoStatus.Status, scsiStatus);
 
     } while (FALSE);
 
@@ -618,11 +673,11 @@ GetByteFromRingBuf(PUCHAR Data)
 VOID
 SaveCdbToRingBuf(PUCHAR Cdb, UCHAR CdbLength)
 {
-    SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0, 0);
+    SaveCdbToRingBufEx(Cdb, CdbLength, NULL, 0, 0, 0);
 }
 
 VOID 
-SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength, NTSTATUS status)
+SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDataLength, NTSTATUS ntStatus, UCHAR scsiStatus)
 {
     WdfSpinLockAcquire(CdbBufSpinLock);
 
@@ -635,11 +690,11 @@ SaveCdbToRingBufEx(PUCHAR Cdb, UCHAR CdbLength, PUCHAR SenseData, UCHAR SenseDat
     RingBufPut(0xDE); 
     RingBufPut(0xAF);
 
-    // Status code
-    RingBufPut((UCHAR)status);
-    RingBufPut((UCHAR)(status >> 8));
-    RingBufPut((UCHAR)(status >> 16));
-    RingBufPut((UCHAR)(status >> 24));
+    // NtStatus code
+    RingBufPutEx((PUCHAR)&ntStatus, sizeof(NTSTATUS));
+    
+    // ScsiStatus
+    RingBufPut(scsiStatus);
     
     // CDB length
     RingBufPut(CdbLength);
